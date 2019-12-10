@@ -1,0 +1,247 @@
+<?xml version="1.0"?>
+<!--
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+ 
+    http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License. See accompanying LICENSE file.
+-->
+<configuration>
+ 
+<!-- Site specific YARN configuration properties -->
+ 
+<property>
+    <name>yarn.resourcemanager.hostname</name>
+    <value>baymax-deploy-03</value>
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.hostname</name>
+    <value>baymax-deploy-03</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.hostname</name>
+    <value>baymax-deploy-03</value>
+</property>
+ 
+<property>
+    <name>yarn.resourcemanager.bind-host</name>
+    <value>0.0.0.0</value>
+</property>
+ 
+<property>
+    <name>yarn.resourcemanager.address</name>
+    <value>${yarn.resourcemanager.hostname}:8050</value>
+</property>
+     
+<property>
+    <name>yarn.resourcemanager.admin.address</name>
+    <value>${yarn.resourcemanager.hostname}:8141</value>
+</property>
+ 
+<property>
+    <name>yarn.resourcemanager.resource-tracker.address</name>
+    <value>${yarn.resourcemanager.hostname}:8025</value>
+</property>
+     
+<property>
+    <name>yarn.resourcemanager.scheduler.address</name>
+    <value>${yarn.resourcemanager.hostname}:8030</value>
+</property>
+ 
+<property>
+    <name>yarn.resourcemanager.webapp.address</name>
+    <value>${yarn.resourcemanager.hostname}:8088</value>
+</property>
+ 
+<property>
+    <name>yarn.resourcemanager.webapp.https.address</name>
+    <value>${yarn.resourcemanager.hostname}:8090</value>
+</property>
+     
+<property>
+    <name>yarn.resourcemanager.am.max-attempts</name>
+    <value>2</value>
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.address</name>
+    <value>${yarn.nodemanager.hostname}:45454</value>
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.resource.cpu-vcores</name>
+    <value>2</value>
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.resource.memory-mb</name>
+    <value>16384</value>
+</property>
+ 
+<property> 
+   <name>yarn.scheduler.minimum-allocation-vcores</name> 
+   <value>1</value> 
+</property>
+ 
+<property> 
+   <name>yarn.scheduler.maximum-allocation-vcores</name> 
+   <value>2</value> 
+</property> 
+  
+<property> 
+   <name>yarn.scheduler.minimum-allocation-mb</name> 
+   <value>1024</value> 
+</property> 
+ 
+<property> 
+   <name>yarn.scheduler.maximum-allocation-mb</name> 
+   <value>16384</value> 
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.pmem-check-enabled</name>
+    <value>false</value>
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.vmem-check-enabled</name>
+    <value>false</value>
+</property>
+ 
+<property>
+    <name>yarn.log-aggregation-enable</name>
+    <value>true</value>
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.bind-host</name>
+    <value>0.0.0.0</value>
+</property>
+ 
+<property>
+   <name>hadoop.registry.rm.enabled</name>
+   <value>true</value>
+</property>
+ 
+<property>
+    <name>yarn.log.server.url</name>
+    <value>http://baymax-deploy-03:19888/jobhistory/logs</value>
+</property>
+     
+<property>
+    <name>yarn.log.server.web-service.url</name>
+    <value>http://baymax-deploy-03:8188/ws/v1/applicationhistory</value>
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.log-aggregation.roll-monitoring-interval-seconds</name>
+    <value>3600</value>
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.remote-app-log-dir</name>
+    <value>/app-logs</value>
+</property>
+ 
+<property>
+    <description>向客户端指示是否启用时间线服务。如果启用，最终用户使用的timeline客户端库将发布实体和事件发送到时间线服务器.</description>
+    <name>yarn.timeline-service.enabled</name>
+    <value>true</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.bind-host</name>
+    <value>0.0.0.0</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.address</name>
+    <value>${yarn.timeline-service.hostname}:10200</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.webapp.address</name>
+    <value>${yarn.timeline-service.hostname}:8188</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.webapp.https.address</name>
+    <value>${yarn.timeline-service.hostname}:8190</value>
+</property>
+ 
+<property>
+    <description>向资源管理器和客户端指示是否历史记录-服务是否启用。如果启用，资源管理器将启动
+      记录工时记录服务可以使用历史数据。同样，当应用程序如果启用此选项，请完成.</description>
+    <name>yarn.timeline-service.generic-application-history.enabled</name>
+    <value>true</value>
+</property>
+ 
+<property>
+    <description>Store class name for history store, defaulting to file system store</description>
+    <name>yarn.timeline-service.generic-application-history.store-class</name>
+    <value>org.apache.hadoop.yarn.server.applicationhistoryservice.FileSystemApplicationHistoryStore</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.ttl-enable</name>
+    <value>true</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.recovery.enabled</name>
+    <value>true</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.leveldb-timeline-store.path</name>
+    <value>/hadoop/yarn/timeline</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.state-store-class</name>
+    <value>org.apache.hadoop.yarn.server.timeline.recovery.LeveldbTimelineStateStore</value>
+</property>
+ 
+<property>
+      <name>yarn.timeline-service.store-class</name>
+      <value>org.apache.hadoop.yarn.server.timeline.LeveldbTimelineStore</value>
+    </property>
+ 
+<property>
+    <name>yarn.timeline-service.http-authentication.proxyuser.root.groups</name>
+    <value>*</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.http-authentication.proxyuser.root.hosts</name>
+    <value>${yarn.timeline-service.hostname}</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.http-authentication.simple.anonymous.allowed</name>
+    <value>true</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.http-authentication.type</name>
+    <value>simple</value>
+</property>
+
+<property><name>yarn.resourcemanager.hostname</name><value>baymax-deploy-03</value></property>
+<property><name>yarn.resourcemanager.bind-host</name><value>0.0.0.0</value></property>
+<property><name>yarn.nodemanager.bind-host</name><value>0.0.0.0</value></property>
+<property><name>yarn.nodemanager.bind-host</name><value>0.0.0.0</value></property>
+<property><name>yarn.timeline-service.bind-host</name><value>0.0.0.0</value></property>
+
+
+ 
+</configuration>
+
