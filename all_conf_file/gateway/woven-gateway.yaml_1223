@@ -1,0 +1,330 @@
+woven:
+  system:
+    title: Baymax系统
+    name: Baymax
+    version: 0.9
+  gateway:
+    host: 192.168.32.6
+    port: 8515
+    eureka_server: woven:merce@192.168.2.81:8518/eureka/
+    woven_server_name: platform
+    app_server_name: woven-app
+    oss_server_host: 192.168.2.81:8899
+    streaming_server_host: 192.168.2.81:8877
+    log_server_host: 192.168.2.81:8878
+    service:
+      conf: ${GATEWAY_CONF}
+      key: mysecretkey
+      expiration: 1800
+
+server:
+  address: ${woven.gateway.host}
+  port: ${woven.gateway.port}
+  compression:
+    enabled: true
+    mime-types: application/javascript,text/css,application/json,application/xml,text/html,text/xml,text/plain
+    min-response-size: 2048
+spring:
+  application:
+    name: woven-gateway
+  devtools:
+    restart:
+      enabled: false
+  messages:
+    encoding: UTF-8
+    basename: i18n.messages
+    always-use-message-format: true
+    fallback-to-system-locale: false
+  jackson:
+    time-zone: GMT+8
+    serialization:
+      indent-output: false
+      fail-on-empty-beans: false
+    generator:
+      ignore-unknown: true
+    deserialization:
+      fail-on-ignored-properties: false
+      fail-on-unknown-properties: false
+    parser:
+      allow-unquoted-control-chars: true
+      allow-single-quotes: true
+      ignore-undefined: true
+  resources:
+    static-locations: classpath:/webapp/,classpath:/META-INF/resources/,classpath:/resources/,classpath:/static/,classpath:/public/
+  http:
+    encoding:
+      charset: UTF-8
+      enabled: true
+  cloud:
+      gateway:
+        httpclient:
+          pool:
+            type: DISABLED
+        routes:
+          - id: platform
+            uri: lb://${woven.gateway.woven_server_name}
+            order: 1
+            predicates:
+            - Path=/api/**
+            filters:
+            - PreserveHostHeader
+            - RemoveRequestHeader=Expect
+          - id: wovenEvents
+            uri: lb://${woven.gateway.woven_server_name}
+            order: 1
+            predicates:
+            - Path=/api/wovenEvents/**
+            filters:
+            - PreserveHostHeader
+          - id: oss
+            uri: http://${woven.gateway.oss_server_host}
+            order: 0
+            predicates:
+            - Path=/api/oss/**
+            filters:
+            - PreserveHostHeader
+          - id: streaming
+            uri: http://${woven.gateway.streaming_server_host}
+            order: 0
+            predicates:
+              - Path=/api/streaming/**
+            filters:
+              - PreserveHostHeader
+          - id: logs
+            uri: http://${woven.gateway.log_server_host}
+            order: 0
+            predicates:
+              - Path=/api/logs/**
+            filters:
+              - PreserveHostHeader
+          - id: wovenApp
+            uri: lb://${woven.gateway.app_server_name}
+            order: 0
+            predicates:
+              - Path=/api/woven/**
+            filters:
+            - PreserveHostHeader
+            - RemoveRequestHeader=Expect
+          - id: welcome
+            uri: http://${woven.gateway.host}:${woven.gateway.port}
+            predicates:
+              - Path=/
+            filters:
+            - RewritePath=/(?<segment>.*), /index.html
+            - PreserveHostHeader
+  jpa:
+    database-platform: com.merce.woven.common.jpa.support.dialect.MySQL5DialectUTF8
+    hibernate:
+      ddl-auto: update
+      naming:
+        physical-strategy: org.springframework.boot.orm.jpa.hibernate.SpringPhysicalNamingStrategy
+    properties:
+     hibernate:
+      show_sql: false
+      format_sql: false
+      #use_sql_comments: true
+    open-in-view: true
+    show-sql: false
+  datasource:
+    type: com.zaxxer.hikari.HikariDataSource
+    dialect: mysql
+    driver-class-name: com.mysql.jdbc.Driver
+    url: jdbc:mysql://192.168.2.81:3306/merce_new?useUnicode=true&characterEncoding=utf8&useSSL=false&queryTimeout=2400
+    username: root
+    password: merce
+
+#    dialect: oracle
+#    driver-class-name: oracle.jdbc.OracleDriver
+#    url: jdbc:oracle:thin:@192.168.1.84:1521/orcl
+#    username: merce
+#    password: merce
+    hikari:
+      initialization-fail-timeout: 30
+      minimumIdle: 5
+      maximumPoolSize: 20
+      idleTimeout: 30000
+      poolName: SpringBootJPAHikariCP
+      maxLifetime: 2000000
+      connectionTimeout: 30000
+  cache:
+    type: ehcache
+    cache-names:
+      - tempCache
+      - securityCache
+      - persistentCache
+    ehcache:
+      config: classpath:cache/ehcache/ehcache.xml
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://${woven.gateway.eureka_server}
+    register-with-eureka: true
+    registry-fetch-interval-seconds: 30
+    eureka-server-connect-timeout-seconds: 10
+    eureka-server-read-timeout-seconds: 10
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 10
+    lease-expiration-duration-in-seconds: 10
+
+management:
+  metrics:
+    binders:
+      uptime.enabled: false
+      processor.enabled: false
+      files.enabled: false
+      jvm.enabled: false
+      logback.enabled: false
+      hystrix.enabled: false
+    export:
+      simple:
+        enabled: false
+      elastic:
+        enabled: false
+        host: http://elastic-host:9200
+        index: metrics
+        index-date-format: yyyy-MM
+        user-name: elastic
+        password: changeme
+        auto-create-index: true
+        batchSize: 1000
+        connect-timeout: 10s
+  endpoint:
+    health:
+      enabled: false
+      show-details: never   #if show details use 'always'
+    httptrace:
+      enabled: false
+      summarytime: 5       #minute
+      timeout: 5000        #millisecond
+    shutdown:
+      enabled: false
+  endpoints:
+    enabled-by-default: true
+    actuator:
+      enabled: true
+    web:
+      exposure:
+        include: '*'
+      cors:
+        max-age: 1800s
+swagger2:
+  enable: true
+  resources:
+    - name: woven-gateway
+      url: /v2/api-docs
+      swaggerVersion: 3.0
+    - name: woven-server
+      url: /api/swagger.json
+      swaggerVersion: 3.0
+    - name: woven-app
+      url: /api/woven/swagger.json
+      swaggerVersion: 3.0
+
+swagger2:
+  enable: true
+  resources:
+  - name: woven-gateway
+    url: /v2/api-docs
+    swaggerVersion: 3.0
+  - name: woven-server
+    url: /api/v2/swagger.json
+    swaggerVersion: 3.0
+  - name: woven-app
+    url: /api/woven/v2/swagger.json
+    swaggerVersion: 3.0
+  - name: woven-resource-app
+    url: /api/woven/resource/v2/swagger.json
+    swaggerVersion: 3.0
+  - name: woven-collecter-app
+    url: /api/woven/collecter/v2/swagger.json
+    swaggerVersion: 3.0
+  - name: woven-logserver
+    url: /api/logs/v2/api-docs
+    swaggerVersion: 3.0
+security:
+  token:
+    jwt:
+      access-token-exp-in: 6000
+      refresh-token-exp-in: 7200
+      token-issuer: www.inforefiner.com
+      token-signing-key: mysecretkey
+    ignored:
+      any-methods:
+      - /
+      - /favicon.ico
+      - /test/**
+      - /webjars/**
+      - /static/**
+      - /api/system/info
+      - /api/license/**
+      - /swagger-resources/**
+      - /v2/api-docs
+      - /api/logs/v2/api-docs
+      - /api/swagger.json
+      - /api/*/swagger.json
+      - /api/*/*/*/swagger.json
+      - /index.html**
+      - /swagger-ui.html**
+      - /doc.html
+      - /swagger-ui/**
+      - /ambari/**
+      - /api/v1/**
+      - /views/**
+      - /proxy/**
+      - /api/logs/metrics/request/export
+      static-resources:
+      - /
+      - /static/**
+      - /**/*.html
+      - /**/*.js
+      - /**/*.css
+      - /**/*.ico
+      - /webjars/**
+      - /index.html**
+      - /swagger-ui.html**
+  init:
+    enable: false
+    username: admin
+    password: 123456
+    pwdStrict: false
+    permsFile: classpath:init/perms/roots.xml
+    #uriMappingFile: classpath:/init/uri/*.json  #uri映射文件，swagger 文档导出的json文件，一般无需配置
+hystrix:
+  command:
+    default:
+      execution:
+        timeout:
+          enabled: true
+        isolation:
+          thread:
+            timeoutInMilliseconds: 9000
+ribbon:
+  ReadTimeout: 3000
+  ConnectTimeout: 3000
+  MaxAutoRetries: 1
+  MaxAutoRetriesNextServer: 1
+  OkToRetryOnAllOperations: false
+
+##mybatis相关配置
+mybatis:
+  mapper-locations:
+  - classpath:mapper/*/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    default-fetch-size: 100
+    default-statement-timeout: 30
+mapper:
+  not-empty: false
+  identity: ${spring.datasource.dialect}
+  style: camelhumpanduppercase
+  enable-method-annotation: true
+pagehelper:
+  helperDialect: ${spring.datasource.dialect}
+  reasonable: true
+  supportMethodsArguments: true
+  params: count=countSql

@@ -1,0 +1,78 @@
+server.address=192.168.2.81
+server.compression.enabled=true
+server.compression.mime-types=text/xml,application/xml,application/json
+server.compression.min-response-size=2048
+
+feign.compression.request.enabled=true
+feign.compression.response.enabled=true
+feign.compression.request.mime-types=text/xml,application/xml,application/json
+feign.compression.request.min-request-size=2048
+
+## internal enable/disable for saas applications
+woven.rest.internal.enable=true
+woven.rest.internal.token=merce
+
+## grpc client address and port configurations
+grpc.client.server-grpc-server.host=192.168.2.81
+grpc.client.server-grpc-server.port=18801
+
+grpc.client.pipeline-grpc-server.host=192.168.2.81
+grpc.client.pipeline-grpc-server.port=18802
+
+grpc.client.df-executor-grpc-server.host=192.168.2.81
+grpc.client.df-executor-grpc-server.port=18803
+
+grpc.client.more-executor-grpc-server.host=192.168.2.81
+grpc.client.more-executor-grpc-server.port=18804
+
+log4j.appender.socket.RemoteHost=localhost
+log4j.appender.socket.Port=45690
+
+#for rest api
+ribbon.ReadTimeout=60000
+ribbon.ConnectTimeout=60000
+ribbon.MaxAutoRetries=1
+ribbon.MaxAutoRetriesNextServer=1
+ribbon.okToRetryOnAllOperations=false
+ribbon.eager-load.enabled=true
+ribbon.eager-load.clients=platform,pipeline,df-executor,script-executor
+
+# metrics configuration
+woven.jobs.metrics.enabled=true
+woven.jobs.metrics.count-cron=0 0/1 * * * ?
+management.metrics.export.simple.enabled=false
+management.metrics.export.elastic.enabled=true
+management.metrics.export.elastic.host=http://192.168.1.84:9200
+management.metrics.export.elastic.index=index_name
+#management.metrics.export.elastic.user-name=es_admin
+#management.metrics.export.elastic.password=123456
+management.metrics.export.elastic.index-date-format=yyyy-MM
+management.metrics.export.elastic.auto-create-index=true
+management.metrics.export.elastic.batchSize=1000
+management.metrics.export.elastic.connect-timeout=15s
+management.metrics.web.server.auto-time-requests=true
+
+#health check
+management.endpoint.health.enabled=true
+management.endpoint.health.show-details=always
+management.health.db.enabled=true
+management.health.diskspace.enabled=false
+
+#disabled some default metrics
+management.info.defaults.enabled=false
+management.health.defaults.enabled=false
+management.metrics.binders.uptime.enabled=false
+management.metrics.binders.processor.enabled=false
+management.metrics.binders.files.enabled=false
+management.metrics.binders.jvm.enabled=false
+management.metrics.binders.logback.enabled=false
+management.metrics.binders.hystrix.enabled=false
+
+
+####standard configuration####
+##save format: mapdb, redis, parquet, default mapdb##
+standard.save.format=mapdb
+##redis format configuration##
+##cluster split by ;##
+standard.redis.url=info3:6379;info1:6379
+standard.redis.password=

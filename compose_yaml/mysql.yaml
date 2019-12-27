@@ -1,0 +1,24 @@
+version: '3.2'
+
+services:
+
+    woven_mysql:
+        image: mysql:5.7
+        container_name: mysql
+        environment:
+            MYSQL_ROOT_PASSWORD: merce
+        ports:
+            - "3306:3306"
+        volumes:
+            - "mysql_conf:/etc/mysql/mysql.conf.d:rw"
+            - "mysql_log:/var/mysql/logs:rw"
+            - "mysql_data1:/var/lib/mysql:rw"
+            - "/mysql/init:/docker-entrypoint-initdb.d:rw"
+            - /mytmp:/tmp/mytmp
+        network_mode: "host"
+          
+volumes:
+    mysql_conf:
+    mysql_data1:
+    mysql_log:
+     

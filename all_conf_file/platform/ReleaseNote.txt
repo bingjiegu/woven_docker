@@ -1,0 +1,12 @@
+f8ea937 - 史涌,2 weeks ago : Merge pull request #327 from chenpengchuan/master
+99c766a - shanke,2 weeks ago : Merge pull request #328 from navywang110/master
+513c29b - chenpengchuan,2 weeks ago : fix 集群注册信息disabled后对应所有服务应该都不可用
+856f165 - navywang110,2 weeks ago : split version and release API
+56363f0 - chenpengchuan,2 weeks ago : fix java.lang.UnsupportedOperationException
+3468c93 - navywang110,2 weeks ago : support query version and release note API
+6cf849a - navywang110,2 weeks ago : fix bug: import flow shouldn't use old resource id
+60de6de - chenpengchuan,2 weeks ago : remove woven-data spring-cloud-commons dependency
+2b03a91 - chenpengchuan,2 weeks ago : finished集群注册信息和eureka注册信息保持状态同步
+93c7634 - chenpengchuan,2 weeks ago : [BAYM-3066] fix 支持查看CACHE类型的数据集中的全部数据
+8b2b291 - 王海军,2 weeks ago : Merge pull request #326 from chenpengchuan/master
+1af453e - chenpengchuan,2 weeks ago : add livy support clusters

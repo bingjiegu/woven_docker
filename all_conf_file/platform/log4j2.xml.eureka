@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="INFO" monitorInterval="120">
+    <Properties>
+        <Property name="LOG_PATH">${sys:WOVEN_LOGS_DIR}/${sys:WOVEN_COM_NAME}</Property>
+        <Property name="LOG_FILE">${LOG_PATH}/${sys:WOVEN_COM_NAME}.log</Property>
+        <Property name="JSON_LOG_FILE">${LOG_PATH}/${sys:WOVEN_COM_NAME}_json.log</Property>
+        <Property name="LOG_LEVEL_PATTERN">%5p</Property>
+        <Property name="LOG_PATTERN">[%d{yyyy-MM-dd HH:mm:ss.SSS}] %X{pid} ${LOG_LEVEL_PATTERN} [%t] --- %c{1}: %m%n %throwable{1000}</Property>
+    </Properties>
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="${LOG_PATTERN}"/>
+        </Console>
+        <RollingFile name="Rolling_file" immediateFlush="true" fileName="${LOG_FILE}" filePattern="${LOG_PATH}/${sys:WOVEN_COM_NAME}.log.%d{yyyy-MM-dd}-%i">
+            <PatternLayout pattern="${LOG_PATTERN}"/>
+            <Filters>
+                <ThresholdFilter level="INFO" onMatch="ACCEPT" onMismatch="DENY"/>
+            </Filters>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="250 MB"/>
+            </Policies>
+            <DefaultRolloverStrategy fileIndex="nomax">
+                <Delete basePath="${LOG_PATH}">
+                    <IfFileName  glob="${sys:WOVEN_COM_NAME}*"/>
+                    <IfLastModified age="30d" />
+                </Delete>
+            </DefaultRolloverStrategy>
+        </RollingFile>
+        <RollingFile name="Rolling_file_json" immediateFlush="true" fileName="${JSON_LOG_FILE}" filePattern="${LOG_PATH}/${sys:WOVEN_COM_NAME}_json-%d{yyyyMMdd}-%i.log">
+            <JsonLayout compact="true" eventEol="true" properties="true" stacktraceAsString="true" >
+                <KeyValuePair key="nanoTimestamp" value="$${UtcNanos:}"/>
+            </JsonLayout>
+            <Filters>
+                <ThresholdFilter level="INFO" onMatch="NEUTRAL" onMismatch="DENY"/>
+                <ThreadContextMapFilter onMatch="ACCEPT" onMismatch="DENY">
+                    <KeyValuePair key="tracking" value="on" />
+                </ThreadContextMapFilter>
+            </Filters>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+            </Policies>
+            <DefaultRolloverStrategy fileIndex="nomax">
+                <Delete basePath="${LOG_PATH}">
+                    <IfFileName  glob="${sys:WOVEN_COM_NAME}_json*"/>
+                    <IfLastModified age="1d" />
+                </Delete>
+            </DefaultRolloverStrategy>
+        </RollingFile>
+        <Routing name="Routing">
+            <Routes pattern="$${ctx:TASKID}">
+                <!-- This route is chosen if ThreadContext has no value for key TASKID. -->
+                <Route ref="Console" key="${ctx:TASKID}"/>
+                <Route>
+                    <RollingFile name="Rolling_file-${ctx:TASKID}"
+                                 immediateFlush="true"
+                                 fileName="${LOG_PATH}/tasks/TASK-${ctx:TASKID}.log"
+                                 filePattern="${LOG_PATH}/tasksTASK-${ctx:TASKID}-%d{yyyyMMdd}-%i.log">
+                        <PatternLayout pattern="${LOG_PATTERN}"/>
+                        <Policies>
+                            <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                            <SizeBasedTriggeringPolicy size="250 MB"/>
+                        </Policies>
+                        <DefaultRolloverStrategy fileIndex="nomax">
+                            <Delete basePath="${LOG_PATH}">
+                                <IfFileName  glob="TASK-*"/>
+                                <IfLastModified age="30d" />
+                            </Delete>
+                        </DefaultRolloverStrategy>
+                    </RollingFile>
+                </Route>
+            </Routes>
+            <IdlePurgePolicy timeToLive="15" timeUnit="minutes"/>
+        </Routing>
+    </Appenders>
+    <Loggers>
+
+        <!-- more-executor logger -->
+        <Logger name="com.merce.woven.executor" level="INFO" additivity="false">
+            <AppenderRef ref="Routing"/>
+            <AppenderRef ref="Rolling_file"/>
+            <AppenderRef ref="Rolling_file_json"/>
+        </Logger>
+
+        <Root level="INFO">
+            <!-- enable for local debugging -->
+            <AppenderRef ref="Console" />
+            <AppenderRef ref="Rolling_file"/>
+            <AppenderRef ref="Rolling_file_json"/>
+        </Root>
+    </Loggers>
+</Configuration>

@@ -1,0 +1,24 @@
+version: '3.2'
+
+services:
+      woven_app:
+        image: woven_app:latest
+        container_name: app
+        expose:
+            - "8514"
+        depends_on:
+            - woven_mysql
+        volumes:
+            - "app_logs:/woven_app/logs:rw"
+            - "app_conf:/woven_app/conf:rw"
+            - "app_ui:/woven_app/woven-ui:rw"
+            - "/etc/hadoop/conf:/etc/hadoop/conf"
+            - "/app:/app"
+            - /mytmp:/tmp/mytmp
+        network_mode: "host"
+
+volumes:    
+    app_logs:
+    app_conf:
+    app_ui:
+

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:dubbo="http://code.alibabatech.com/schema/dubbo"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://code.alibabatech.com/schema/dubbo
+       http://code.alibabatech.com/schema/dubbo/dubbo.xsd">
+
+    <!-- 提供方应用信息，用于计算依赖关系 -->
+    <dubbo:application name="woven-server"/>
+
+    <!-- 用dubbo协议在20880端口暴露服务 -->
+    <dubbo:protocol name="dubbo" port="-1" heartbeat="0"/>
+
+    <!-- 使用multicast广播注册中心暴露服务地址 -->
+    <dubbo:registry protocol="zookeeper" address="${dubbo.provider.address}"
+                    username="${dubbo.provider.username:admin}" password="${dubbo.provider.password:123456}"
+                    client="curatorx"/>
+
+    <!-- 声明需要暴露的服务接口 -->
+    <bean id="taskService" class="com.merce.woven.app.rpc.TaskServiceImpl"/>
+    <bean id="bridgeService" class="com.merce.woven.app.rpc.BridgeServiceImpl"/>
+
+    <dubbo:service interface="com.merce.woven.rpc.TaskService" ref="taskService" timeout="60000"/>
+    <dubbo:service interface="com.merce.woven.rpc.BridgeService" ref="bridgeService" timeout="60000">
+        <dubbo:method name="addListener" sticky="true">
+            <dubbo:argument type="com.merce.woven.rpc.CallbackListener" callback="true"/>
+        </dubbo:method>
+    </dubbo:service>
+
+    <!-- 服务依赖-->
+    <dubbo:reference id="loggingService" interface="com.merce.woven.rpc.LoggingService" check="false">
+        <dubbo:method name="log" async="true"/>
+    </dubbo:reference>
+</beans>

@@ -1,0 +1,346 @@
+woven:
+  system:
+    title: cab民政局 - 管理系统
+    name: Cab
+    version: 0.9
+  gateway:
+    host: baymax-deploy-03
+    port: 8515
+    woven_server_name: platform
+    app_server_name: woven-app
+    oss_server_host: ${woven.gateway.host}:8899
+    streaming_server_host: ${woven.gateway.host}:8877
+    log_server_host: ${woven.gateway.host}:8879
+    visul_host: ${woven.gateway.host}:8580
+    rtc-streaming: ${woven.gateway.host}:17520
+    service:
+      conf: ${GATEWAY_CONF}
+      key: mysecretkey
+      expiration: 1800
+server:
+  address: ${woven.gateway.host}
+  port: ${woven.gateway.port}
+  compression:
+    enabled: true
+    mime-types: application/javascript,text/css,application/json,application/xml,text/html,text/xml,text/plain
+    min-response-size: 2048
+
+spring:
+  application:
+    name: woven-gateway
+  devtools:
+    restart:
+      enabled: false
+  messages:
+    encoding: UTF-8
+    basename: i18n.messages
+    always-use-message-format: true
+    fallback-to-system-locale: false
+  jackson:
+    time-zone: GMT+8
+    serialization:
+      indent-output: false
+      fail-on-empty-beans: false
+    generator:
+      ignore-unknown: true
+    deserialization:
+      fail-on-ignored-properties: false
+      fail-on-unknown-properties: false
+    parser:
+      allow-unquoted-control-chars: true
+      allow-single-quotes: true
+      ignore-undefined: true
+  resources:
+    static-locations: classpath:/webapp/,classpath:/META-INF/resources/,classpath:/resources/,classpath:/static/,classpath:/public/
+  http:
+    encoding:
+      charset: UTF-8
+      enabled: true
+  cloud:
+    gateway:
+      httpclient:
+        pool:
+          type: DISABLED
+      routes:
+      - id: platform
+        uri: lb://${woven.gateway.woven_server_name}
+        order: 1
+        predicates:
+        - Path=/api/**
+        filters:
+        - PreserveHostHeader
+        - RemoveRequestHeader=Expect
+      - id: wovenEvents
+        uri: lb://${woven.gateway.woven_server_name}
+        order: 1
+        predicates:
+        - Path=/api/wovenEvents/**
+        filters:
+        - PreserveHostHeader
+      - id: oss
+        uri: http://${woven.gateway.oss_server_host}
+        order: 0
+        predicates:
+        - Path=/api/oss/**
+        filters:
+        - PreserveHostHeader
+      - id: streaming
+        uri: http://${woven.gateway.streaming_server_host}
+        order: 0
+        predicates:
+        - Path=/api/streaming/**
+        filters:
+        - PreserveHostHeader
+      - id: rtc-streaming
+        uri: http://${woven.gateway.rtc-streaming}
+        order: 0
+        predicates:
+        - Path=/api/rtc/**
+        filters:
+        - PreserveHostHeader
+      - id: logs
+        uri: http://${woven.gateway.log_server_host}
+        order: 0
+        predicates:
+        - Path=/api/logs/**
+        filters:
+        - PreserveHostHeader
+      - id: wovenApp
+        uri: lb://${woven.gateway.app_server_name}
+        order: 0
+        predicates:
+        - Path=/api/woven/**
+        filters:
+        - PreserveHostHeader
+        - RemoveRequestHeader=Expect
+      - id: welcome
+        uri: http://${woven.gateway.host}:${woven.gateway.port}
+        predicates:
+        - Path=/
+        filters:
+        - RewritePath=/(?<segment>.*), /index.html
+        - PreserveHostHeader
+      - id: visul
+        uri: http://${woven.gateway.visul_host}
+        order: 0
+        predicates:
+        - Path=/api/visul/**
+        filters:
+        - PreserveHostHeader
+      - id: ambari
+        uri: http://${woven.gateway.host}:8080
+        order: 0
+        predicates:
+        - Path=/ambari/**
+        filters:
+        - RewritePath=/ambari/(?<segment>.*), /$\{segment}
+        - AddRequestHeader=Authorization, Basic YWRtaW46YWRtaW4=
+        - SetResponseHeader=X-Frame-Options, SAMEORIGIN
+        - PreserveHostHeader
+      - id: ambari-api
+        uri: http://baymax-deploy-03:8080
+        order: 0
+        predicates:
+        - Path=/api/v1/**
+        filters:
+        - AddRequestHeader=Authorization, Basic YWRtaW46YWRtaW4=
+        - SetResponseHeader=X-Frame-Options, SAMEORIGIN
+        - PreserveHostHeader
+      - id: ambari-icon
+        uri: http://${woven.gateway.host}:${woven.gateway.port}
+        order: 0
+        predicates:
+        - Path=/img/logo-white.png
+        filters:
+        - RewritePath=/img/logo-white.png, /static/images/logo-white.png
+        - SetResponseHeader=X-Frame-Options, SAMEORIGIN
+        - PreserveHostHeader
+      - id: ambari-views
+        uri: http://${woven.gateway.host}:8080
+        order: 0
+        predicates:
+        - Path=/views/**
+        filters:
+        - AddRequestHeader=Authorization, Basic YWRtaW46YWRtaW4=
+        - SetResponseHeader=X-Frame-Options, SAMEORIGIN
+        - PreserveHostHeader
+    consul:
+      host: ${woven.gateway.host}
+      port: 8123
+      discovery:
+        prefer-ip-address: true
+        health-check-path: /
+  datasource:
+    dialect: mysql
+    type: com.zaxxer.hikari.HikariDataSource
+    driver-class-name: com.mysql.jdbc.Driver
+    url: jdbc:mysql://${woven.gateway.host}:3306/merce?characterEncoding=utf8&useSSL=false&autoReconnect=true&failOverReadOnly=false&autoReconnectForPools=true&failOverReadOnly=false&allowMultiQueries=true&serverTimezone=GMT&&queryTimeout=2400    
+    username: root
+    password: merce
+    hikari:
+      initialization-fail-timeout: 30
+      minimumIdle: 5
+      maximumPoolSize: 20
+      idleTimeout: 30000
+      poolName: SpringBootJPAHikariCP
+      maxLifetime: 2000000
+      connectionTimeout: 30000
+  jpa:
+    database-platform: com.merce.woven.common.jpa.support.dialect.MySQL5DialectUTF8
+    hibernate:
+      ddl-auto: update
+      naming:
+        physical-strategy: org.springframework.boot.orm.jpa.hibernate.SpringPhysicalNamingStrategy
+    properties:
+     hibernate:
+      show_sql: true
+      format_sql: true
+  cache:
+    type: ehcache
+    cache-names:
+    - tempCache
+    - securityCache
+    - persistentCache
+    ehcache:
+      config: classpath:cache/ehcache/ehcache.xml
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+management:
+  metrics:
+    export:
+      simple:
+        enabled: false
+      elastic:
+        enabled: true
+        host: http://192.168.1.85:9203
+        index: metrics_81
+        index-date-format: yyyy-MM
+        user-name: elastic
+        password: changeme
+        auto-create-index: true
+        batchSize: 1000
+        connect-timeout: 10s
+    binders.uptime.enabled: false
+    binders.processor.enabled: false
+    binders.files.enabled: false
+    binders.jvm.enabled: false
+    binders.logback.enabled: false
+    binders.log4j.enabled: false
+    binders.hystrix.enabled: false
+  endpoint:
+    health:
+      enabled: true
+      show-details: always
+    httptrace:
+      enabled: true
+      summarytime: 5
+      timeout: 5000
+    shutdown:
+      enabled: false
+  endpoints:
+    enabled-by-default: true
+    actuator:
+      enabled: true
+    web:
+      exposure:
+        include: '*'
+      cors:
+        max-age: 1800s
+swagger2:
+  enable: true
+  resources:
+  - name: woven-gateway
+    url: /v2/api-docs
+    swaggerVersion: 3.0
+  - name: woven-server
+    url: /api/swagger.json
+    swaggerVersion: 3.0
+  - name: woven-app
+    url: /api/woven/swagger.json
+    swaggerVersion: 3.0
+  - name: woven-visul
+    url: /api/visul/v2/api-docs
+    swaggerVersion: 3.0
+security:
+  token:
+    jwt:
+      access-token-exp-in: 3600000
+      refresh-token-exp-in: 72000
+      token-issuer: www.inforefiner.com
+      token-signing-key: mysecretkey
+    ignored:
+      any-methods:
+      - /
+      - /favicon.ico
+      - /test/**
+      - /webjars/**
+      - /static/**
+      - /api/system/info
+      - /api/license/**
+      - /swagger-resources/**
+      - /v2/api-docs
+      - /api/swagger.json
+      - /api/woven/swagger.json
+      - /api/visul/**
+      - /api/visul/v2/api-docs
+      - /index.html**
+      - /swagger-ui.html**
+      - /doc.html
+      - /swagger-ui/** 
+      - /ambari/
+      - /ambari/**
+      - /api/v1/**
+      - /views/**
+      - /api/woven/resource/restructuring
+      - /api/woven/resource/formatPath
+      - /proxy/**
+      - /api/logs/metrics/request/export
+      static-resources:
+      - /
+      - /static/**
+      - /**/*.html
+      - /**/*.js
+      - /**/*.css
+      - /**/*.ico
+      - /webjars/**
+      - /index.html**
+      - /swagger-ui.html**
+  init:
+    enable: true
+    username: admin
+    password: 123456
+    pwdStrict: false
+    permsFile: classpath:init/perms/roots.xml
+hystrix:
+  command:
+    default:
+      execution:
+        timeout:
+          enabled: true
+        isolation:
+          thread:
+            timeoutInMilliseconds: 9000
+ribbon:
+  ReadTimeout: 3000
+  ConnectTimeout: 3000
+  MaxAutoRetries: 1
+  MaxAutoRetriesNextServer: 1
+  OkToRetryOnAllOperations: false
+mybatis:
+  mapper-locations:
+  - classpath:mapper/*/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    default-fetch-size: 100
+    default-statement-timeout: 30
+mapper:
+  not-empty: false
+  identity: ${spring.datasource.dialect}
+  style: camelhumpanduppercase
+  enable-method-annotation: true
+pagehelper:
+  helperDialect: ${spring.datasource.dialect}
+  reasonable: true
+  supportMethodsArguments: true
+  params: count=countSql

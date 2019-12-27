@@ -1,0 +1,12 @@
+server.port=8518
+eureka.instance.hostname=192.168.2.81
+spring.application.name=woven-discovery
+eureka.client.service-url.defaultZone=http://${eureka.instance.hostname}:${server.port}/eureka/
+woven.discovery.user.name=woven
+woven.discovery.user.password=merce
+eureka.server.enableSelfPreservation=false
+eureka.client.register-with-eureka=false
+eureka.instance.preferIpAddress=true
+eureka.client.fetch-registry=false
+#Registration information cache update intervals,30 seconds by default
+eureka.server.response-cache-update-interval-ms=30000

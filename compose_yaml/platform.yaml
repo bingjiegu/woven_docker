@@ -1,0 +1,97 @@
+version: '3.2'
+
+services:  
+ 
+    woven_server:
+        image: woven_platform:latest
+        container_name: woven_server
+        ports:
+            - "17510"
+        environment:
+            WOVEN_BOOT: woven_server
+        depends_on:
+            - woven_mysql
+        volumes:
+            - "platform_logs:/woven_platform/logs:rw"
+            - "platform_conf:/woven_platform/conf:rw"
+            - "/etc/hadoop/conf:/etc/hadoop/conf"
+            - "/app:/app"
+            - /mytmp:/tmp/mytmp
+        network_mode: "host"
+        
+    woven_pipeline:
+        image: woven_platform:latest
+        container_name: woven_pipeline
+        restart: always
+        ports:
+            - "17511"
+        environment:
+            WOVEN_BOOT: woven_pipeline
+        depends_on:
+            - woven_server
+        volumes:
+            - "platform_logs:/woven_platform/logs:rw"
+            - "platform_conf:/woven_platform/conf:rw"
+            - "/etc/hadoop/conf:/etc/hadoop/conf"
+            - "/app:/app"
+            - /mytmp:/tmp/mytmp
+        #extra_hosts:
+            #- "baymax-deploy-03:192.168.2.81"
+        network_mode: "host"
+
+    woven_more_executor:
+        image: woven_platform:latest
+        container_name: more_executor
+        ports:
+            - "17513"
+        depends_on:
+            - woven_server
+        environment:
+            WOVEN_BOOT: woven_executor_more
+        volumes:
+            - "platform_logs:/woven_platform/logs:rw"
+            - "platform_conf:/woven_platform/conf:rw"
+            - "/etc/hadoop/conf:/etc/hadoop/conf"
+            - "/app:/app"
+            - /mytmp:/tmp/mytmp
+        network_mode: "host"
+
+    woven_df_executor:
+        image: woven_platform:latest
+        container_name: df_executor
+        ports:
+            - "17512"
+        depends_on:
+            - woven_server
+        environment:
+            WOVEN_BOOT: woven_executor_df
+        volumes:
+            - "platform_logs:/woven_platform/logs:rw"
+            - "platform_conf:/woven_platform/conf:rw"
+            - "/etc/hadoop/conf:/etc/hadoop/conf"
+            - "/app:/app"
+            - /mytmp:/tmp/mytmp
+        network_mode: "host"
+    
+    woven_livy:
+        image: woven_platform:latest
+        container_name: livy
+        ports:
+            - "8998"
+        depends_on:
+            - woven_server
+        environment:
+            WOVEN_BOOT: woven_livy
+        volumes:
+            - "livy_logs:/woven_platform/livy-server/logs:rw"
+            - "livy_conf:/woven_platform/livy-server/conf:rw"
+            - "/etc/hadoop/conf:/etc/hadoop/conf"
+            - "/app:/app"
+            - /mytmp:/tmp/mytmp
+        network_mode: "host"
+   
+volumes:
+    platform_conf:
+    platform_logs:
+    livy_logs:
+    livy_conf: 

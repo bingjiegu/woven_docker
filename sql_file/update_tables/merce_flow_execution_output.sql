@@ -1,0 +1,1 @@
+alter table merce_flow_execution_output add unique key uniquekey (`name`,`execution_id`)
