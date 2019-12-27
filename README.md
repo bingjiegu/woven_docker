@@ -1,7 +1,7 @@
 # woven_docker
 目录说明：
 
-all_Dockerfile: 
+all_Dockerfile:
 打包镜像时需要使用的Dockerfile及entrypoint.sh文件                                                                         
 
 all_conf_file: 
