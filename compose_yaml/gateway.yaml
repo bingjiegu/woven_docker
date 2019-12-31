@@ -6,18 +6,17 @@ services:
         container_name: gateway
         ports:
             - "8515:8515"
-            - "8400:8400"
         depends_on:
             - woven_mysql
         environment:
             WOVEN_BOOT: woven_gateway
         volumes:                      
-            - "gateway_con:/woven_gateway/conf:rw"
+            - "gateway_conf:/woven_gateway/conf:rw"
             - "gateway_log:/woven_gateway/logs:rw"
-            - /mytmp:/tmpmytmp
+            - /mytmp:/tmp/mytmp
         network_mode: "host"
 
 volumes:
-   gateway_con:
+   gateway_conf:
    gateway_log:
 
