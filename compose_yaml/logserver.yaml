@@ -1,0 +1,17 @@
+version: '3.2'
+services:
+   logserver:
+     image: woven_logserver:latest
+     container_name: logserver
+     ports:
+       - "8879:8879"
+     depends_on:
+       - woven_consul
+     volumes:
+       - logserver_conf:/woven_logserver/conf:rw
+       - logserver_logs:/woven_logserver/log:rw
+     network_mode: "host"
+
+volumes:
+   logserver_conf:
+   logserver_logs:
