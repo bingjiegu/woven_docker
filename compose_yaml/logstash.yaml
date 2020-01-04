@@ -1,0 +1,19 @@
+version: '3.2'
+services:
+  logstash:
+    image: logstash:2.4
+    container_name: logstash
+    volumes:
+      - /var/lib/docker/volumes/merce_platform_logs/_data/:/platform_logs:rw
+      - logstash_info:/logstash:rw
+    network_mode: "host"
+
+  elasticsearch:
+    image: elasticsearch:5.6
+    container_name: es
+    volumes:
+      - es_config:/usr/share/elasticsearch/config:rw  
+    network_mode: "host"
+volumes:
+   logstash_info:
+   es_config:
