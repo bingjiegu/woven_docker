@@ -1,0 +1,11 @@
+version: '3.2'
+services:
+  logstash:
+    image: logstash:2.4
+    container_name: logstash
+    volumes:
+      - /var/lib/docker/volumes/merce_platform_logs/_data/:/platform_logs:rw
+      - logstash_info:/logstash:rw
+
+volumes:
+   logstash_info:
