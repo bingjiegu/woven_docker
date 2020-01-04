@@ -1,0 +1,11 @@
+#http.host: 0.0.0.0
+network.host: baymax-deploy-03
+
+http.port: 9201
+transport.tcp.port: 9302
+
+bootstrap.memory_lock: false
+bootstrap.system_call_filter: false
+# Uncomment the following lines for a production cluster deployment
+#transport.host: 0.0.0.0
+#discovery.zen.minimum_master_nodes: 1
