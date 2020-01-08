@@ -19,6 +19,6 @@ services:
           
 volumes:
     mysql_conf:
-    mysql_data1:
+    mysql_data:
     mysql_log:
      
