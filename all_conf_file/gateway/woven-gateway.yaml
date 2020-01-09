@@ -213,8 +213,8 @@ management:
         enabled: false
       elastic:
         enabled: true
-        host: http://192.168.1.85:9203
-        index: metrics_81
+        host: http://baymax-deploy-03:9201
+        index: metrics_bm
         index-date-format: yyyy-MM
         user-name: elastic
         password: changeme
