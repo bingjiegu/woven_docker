@@ -1,0 +1,1336 @@
+docker swarm简介
+baymax容器化组件
+两个image：platform和gateway
+gateway entrypoint 脚本
+gateway image docker file
+修改配置文件
+platform entrypoint 脚本
+platform image docker file
+修改配置文件
+Baymax 服务
+docker-compose-woven.yml
+docker-compose-woven-executor-df.yml
+docker-compose-woven-mysql-zk.yml
+HDFS/SPARK包安装
+HADOOP集群
+下载镜像
+升级hadoop-spark:2.1.2_2.8.1到hadoop-spark:2.4.4_2.8.1
+docker-compose文件
+启动容器
+YARN配置文件改动
+启动spark master worker
+验证spark-submit
+swarm节点建立spark client环境
+解决web端无法查看spark job日志
+其它组件
+问题
+每次gateway容器启动都要激活码问题
+docker swarm简介
+　Docker swarm是Docker官方提供的一款集群管理工具，其主要作用是把若干台Docker主机抽象为一个整体，并且通过一个入口统一管理这些Docker主机上的各种Docker资源。Swarm和Kubernetes比较类似，但是更加轻，具有的功能也较kubernetes更少一些。
+
+    Docker swarm提供了节点发现、任务调度、资源分配、容错恢复等功能，跨多个docker 主机进行服务编排，而docker-compose只能在一台docker主机上编排各种服务管理。所以Docker swarm的容器管理是基于“集群”的。
+
+   Docker swarm管理的集群包括一般节点和manage node，只有manage node，才可以执行某些管理功能。
+
+   https://docs.docker.com/engine/swarm/
+
+docker swarm的命令如下：
+
+[root@bogon ~]# docker swarm
+ 
+Usage:    docker swarm COMMAND
+ 
+Manage Swarm
+ 
+Commands:
+  ca          Display and rotate the root CA
+  init        Initialize a swarm
+  join        Join a swarm as a node and/or manager
+  join-token  Manage join tokens
+  leave       Leave the swarm
+  unlock      Unlock swarm
+  unlock-key  Manage the unlock key
+  update      Update the swarm
+包括集群的创建，节点的加入和退出，集群的token等。其中token是节点加入集群的令牌，由管理节点创建集群时生成，可更新。
+
+在swarm集群上，执行docker service命令创建和管理服务。
+
+[root@bogon ~]# docker service
+ 
+Usage: docker service COMMAND
+ 
+Manage services
+ 
+Commands:
+ create - Create a new service
+ inspect - Display detailed information on one or more services
+ logs - Fetch the logs of a service or task
+ ls - List services
+ ps - List the tasks of one or more services
+ rm - Remove one or more services
+ rollback - Revert changes to a service's configuration
+ scale - Scale one or multiple replicated services
+ update - Update a service
+一般需要编排多个服务，所以docker支持使用docker-compose.yml文件定义服务，并使用docker stack命令启动。这一点与docker-compose在一台docker 主机上启动多个服务类似。
+
+[root@bogon ~]# docker stack
+ 
+Usage: docker stack [OPTIONS] COMMAND
+ 
+Manage Docker stacks
+ 
+Options:
+ --orchestrator string Orchestrator to use (swarm|kubernetes|all)
+ 
+Commands:
+ deploy - Deploy a new stack or update an existing stack
+ ls - List stacks
+ ps - List the tasks in the stack
+ rm - Remove one or more stacks
+ services - List the services in the stack
+baymax容器化部署的目标，就是归纳出各种服务，然后把服务定义到一个docker-compose.yml配置文件中，使用docker stack启动。
+
+baymax容器化组件
+目前容器化的组件包括woven_gateway和woven_platform以及用到的zookeeper(woven_app依赖)和mysql数据库，其次可以考虑woven_app。外部的ES、HDFS/SPARK可视具体实际决定。
+
+两个image：platform和gateway
+platform和gateway是两块独立的代码，做成两个image。gateway服务基于gateway image，其它几个服务都基于platform image.
+
+gateway entrypoint 脚本
+#!/bin/sh
+ 
+cd /woven_gateway
+ 
+sh bin/woven-gateway.sh start
+ 
+sleep 5
+ 
+exec "$@"
+入口脚本执行启动脚本。
+
+gateway image docker file
+#########################################################################
+### docker build --force-rm --rm --tag woven_gateway:1.0 .            ###
+#########################################################################
+ 
+FROM centos:7.2.1511
+ 
+MAINTAINER jun.zhou "jun.zhou@inforefiner.com"
+ 
+RUN yum install -y net-tools iputils lsof wget
+ 
+# Java
+RUN yum install -y \
+       java-1.8.0-openjdk \
+       java-1.8.0-openjdk-devel
+ 
+ENV JAVA_HOME /etc/alternatives/jre
+ 
+ENV JRE_HOME  $JAVA_HOME
+ 
+ENV PATH $PATH:$JAVA_HOME/bin
+ 
+ENV CLASSPATH=.:$JRE_HOME/lib:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
+ 
+#设置系统编码
+RUN yum install kde-l10n-Chinese -y
+ 
+RUN yum install glibc-common -y
+ 
+RUN localedef -c -f UTF-8 -i zh_CN zh_CN.utf8
+ 
+ENV LANG zh_CN.UTF-8
+ 
+ENV LC_ALL zh_CN.UTF-8
+ 
+# 修改时区
+RUN echo "Asia/shanghai" > /etc/timezone;
+ 
+RUN rm -f /etc/localtime
+ 
+RUN ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+ 
+# woven_gateway dirs
+ 
+RUN mkdir -p /woven_gateway/logs/woven-gateway
+ 
+COPY bin /woven_gateway/bin/
+ 
+#映射到主机目录
+#COPY conf /woven_gateway/conf/
+ 
+#COPY docs /woven_gateway/docs/
+ 
+COPY libs /woven_gateway/libs/
+ 
+COPY woven-gateway /woven_gateway/woven-gateway/
+ 
+# 启动脚本
+COPY ./docker-entrypoint.sh /
+ 
+RUN chmod +x /docker-entrypoint.sh
+ 
+ENTRYPOINT ["/docker-entrypoint.sh"]
+ 
+CMD ["/bin/sh", "-c", "while true; do sleep 60; done"]
+修改配置文件
+按实际环境修改conf/jdbc.properties和conf/woven-gateway.yaml中的相关配置参数，包括：
+
+woven.databases.username	root	conf/jdbc.properties
+woven.databases.password	merce	conf/jdbc.properties
+woven.databases.url	jdbc:mysql://192.168.1.15:3306/merce?useUnicode=true&characterEncoding=utf8	conf/jdbc.properties
+woven.gateway.host	0.0.0.0	conf/woven-gateway.yaml
+woven.gateway.eureka_server	woven:merce@192.168.1.15:8518/eureka/	conf/woven-gateway.yaml
+woven.gateway.log_server_host	192.168.1.15:8878	conf/woven-gateway.yaml
+spring.datasource.username	root	conf/woven-gateway.yaml
+spring.datasource.password	merce	conf/woven-gateway.yaml
+spring.datasource.url	jdbc:mysql://192.168.1.15:3306/merce?useUnicode=true&characterEncoding=utf8&useSSL=false&queryTimeout=2400	conf/woven-gateway.yaml
+
+
+platform entrypoint 脚本
+#!/bin/sh
+ 
+cd /woven_platform
+ 
+echo "boot ......" > ./bootup.log
+ 
+WOVEN_SERVER=woven_server
+WOVEN_DISCOVERY=woven_discovery
+WOVEN_PIPELINE=woven_pipeline
+WOVEN_EXECUTOR_DF=woven_executor_df
+WOVEN_EXECUTOR_MORE=woven_executor_more
+WOVEN_LIVY=woven_livy
+ 
+echo "boot component: ${WOVEN_BOOT,,}" >> ./bootup.log
+ 
+if [ x"${WOVEN_SERVER,,}" == x"${WOVEN_BOOT,,}" ]
+then
+    bin/woven-server.sh start
+ 
+ 
+elif [ x"${WOVEN_DISCOVERY,,}" == x"${WOVEN_BOOT,,}" ]
+then
+    bin/woven-discovery.sh start
+ 
+ 
+elif [ x"${WOVEN_PIPELINE,,}" == x"${WOVEN_BOOT,,}" ]
+then
+    bin/pipeline-server.sh start
+ 
+ 
+elif [ x"${WOVEN_EXECUTOR_DF,,}" == x"${WOVEN_BOOT,,}" ]
+then
+    bin/df-executor.sh start
+ 
+ 
+elif [ x"${WOVEN_EXECUTOR_MORE,,}" == x"${WOVEN_BOOT,,}" ]
+then
+    bin/more-executors.sh start
+ 
+ 
+elif [ x"${WOVEN_LIVY,,}" == x"${WOVEN_BOOT,,}" ]
+then
+    bin/livy-server.sh start
+ 
+ 
+else
+    echo "invalid boot component: ${WOVEN_PLATFORM_BOOT,,}" >> ./bootup.log
+    exit 127
+ 
+fi
+ 
+sleep 5
+ 
+exec "$@"
+入口脚本以环境变量方式判断启动的服务，运行服务脚本。
+
+platform image docker file
+###################################################################
+### docker build --force-rm --rm --tag woven_platform:1.0 .
+###################################################################
+ 
+FROM centos:7.2.1511
+ 
+MAINTAINER jun.zhou "jun.zhou@inforefiner.com"
+ 
+RUN yum install -y net-tools iputils lsof wget
+ 
+# Java
+RUN yum install -y \
+       java-1.8.0-openjdk \
+       java-1.8.0-openjdk-devel
+ 
+ENV JAVA_HOME /etc/alternatives/jre
+ 
+ENV JRE_HOME  $JAVA_HOME
+ 
+ENV PATH $PATH:$JAVA_HOME/bin
+ 
+ENV CLASSPATH=.:$JRE_HOME/lib:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
+ 
+#设置系统编码
+RUN yum install kde-l10n-Chinese -y
+ 
+RUN yum install glibc-common -y
+ 
+RUN localedef -c -f UTF-8 -i zh_CN zh_CN.utf8
+ 
+ENV LANG zh_CN.UTF-8
+ 
+ENV LC_ALL zh_CN.UTF-8
+ 
+# 修改时区
+RUN echo "Asia/shanghai" > /etc/timezone;
+ 
+RUN rm -f /etc/localtime
+ 
+RUN ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+ 
+# woven_platform dirs
+ 
+RUN mkdir -p /woven_platform/logs
+ 
+#映射到主机目录
+#COPY conf /woven_platform/conf/
+ 
+COPY bin /woven_platform/bin/
+ 
+COPY libs /woven_platform/libs/
+ 
+COPY df-executor /woven_platform/df-executor/
+ 
+COPY pipeline-server /woven_platform/pipeline-server/
+ 
+COPY woven-server /woven_platform/woven-server/
+ 
+COPY df-spark /woven_platform/df-spark/
+ 
+COPY livy-server /woven_platform/livy-server/
+ 
+COPY more-executors /woven_platform/more-executors/
+ 
+COPY woven-discovery /woven_platform/woven-discovery/
+ 
+#COPY docs /woven_platform/docs/
+ 
+COPY ./docker-entrypoint.sh /
+ 
+RUN chmod +x /docker-entrypoint.sh
+  
+ENTRYPOINT ["/docker-entrypoint.sh"]
+ 
+CMD /bin/sh -c "while true; do sleep 60; done"
+修改配置文件
+按实际环境修改conf下以及各个服务配置目录下的相关配置参数。
+
+JAVA_HOME	删除	conf/woven-env.sh
+management.metrics.export.elastic.enabled	false	conf/woven.properties
+feign.livy.url	http://1921.168.1.15:8998	conf/woven-server.properties
+eureka.client.service-url.defaultZone	http://woven:merce@192.168.1.15:8518/eureka/	conf/woven-server.properties
+server.port	17510	conf/woven-server.properties
+spring.datasource.url	dbc:mysql://192.168.1.15:3306/merce?useUnicode=true&characterEncoding=utf8&useSSL=false	conf/woven-server.properties
+spring.datasource.username	root	conf/woven-server.properties
+spring.datasource.password	merce	conf/woven-server.properties
+eureka.instance.hostname	192.168.1.15	conf/woven-discovery.properties
+server.port	8518	conf/woven-discovery.properties
+eureka.client.serviceUrl.defaultZone	http://woven:merce@192.168.1.15:8518/eureka/	conf/woven-pipeline.properties
+server.port	17511	conf/woven-pipeline.properties
+woven.pipeline.jdbc.url	jdbc:mysql://192.168.1.15:3306/merce?useUnicode=true&characterEncoding=utf8&useSSL=false&queryTimeout=2400	conf/woven-pipeline.properties
+woven.pipeline.jdbc.user	root	conf/woven-pipeline.properties
+woven.pipeline.jdbc.password	merce	conf/woven-pipeline.properties
+spring.datasource.url	jdbc:mysql://192.168.1.15:3306/merce?useSSL=false&useUnicode=true&characterEncoding=utf-8&allowMultiQueries=true	conf/woven-pipeline.properties
+spring.datasource.username
+
+root	conf/woven-pipeline.properties
+spring.datasource.password
+
+merce	conf/woven-pipeline.properties
+eureka.client.serviceUrl.defaultZone	http://woven:merce@192.168.1.15:8518/eureka/	conf/woven-dfexecutor.properties
+server.port	17512	conf/woven-dfexecutor.properties
+spring.datasource.url	jdbc:mysql://192.168.1.15:3306/merce?useSSL=false&useUnicode=true&characterEncoding=utf-8&allowMultiQueries=true	conf/woven-dfexecutor.properties
+spring.datasource.username	root	conf/woven-dfexecutor.properties
+spring.datasource.password	merce	conf/woven-dfexecutor.properties
+eureka.instance.ip-address	192.168.1.15	conf/woven-dfexecutor.properties
+eureka.client.serviceUrl.defaultZone	http://woven:merce@192.168.1.15:8518/eureka/	conf/woven-moreexecutor.properties
+server.port	17513	conf/woven-moreexecutor.properties
+spring.datasource.url	spring.datasource.url=jdbc:mysql://192.168.1.15:3306/merce?useSSL=false&useUnicode=true&characterEncoding=utf-8&allowMultiQueries=true	conf/woven-moreexecutor.properties
+spring.datasource.username	root	conf/woven-moreexecutor.properties
+spring.datasource.password	merce	conf/woven-moreexecutor.properties
+eureka.instance.ip-address	192.168.1.15	conf/woven-moreexecutor.properties
+
+
+Baymax 服务
+woven_mysql	mysql:5.7	否	需要，3306	
+MYSQL密码
+
+MYSQL_ROOT_PASSWORD : merce
+
+- "mysql_conf_d:/etc/mysql/mysql.conf.d:rw"
+
+- "mysql_logs:/var/mysql/logs:rw"
+
+- "mysql_data:/var/lib/mysql:rw"
+
+1
+
+位于管理节点
+
+
+woven_gateway	gateway	否	需要，8515	
+EUREKA主机名/端口
+
+MYSQL 主机名/用户名/密码
+
+- "woven_gateway_logs:/woven_gateway/logs:rw"
+
+- "woven_gateway_conf:/woven_gateway/conf:rw"
+
+- /mytmp:/tmp/mytmp
+
+2	
+woven_discovery
+
+platform	否	需要，8518	MYSQL 主机名/用户名/密码	
+- "woven_logs:/woven_platform/logs:rw"
+
+- "woven_conf:/woven_platform/conf:rw"
+
+- "/etc/hadoop/conf:/etc/hadoop/conf"
+
+- "/app:/app"
+
+- /mytmp:/tmp/mytmp
+
+1	
+woven_pipeline	platform	否	需要，17511	
+EUREKA主机名/端口
+
+MYSQL 主机名/用户名/密码	
+- "woven_logs:/woven_platform/logs:rw"
+
+- "woven_conf:/woven_platform/conf:rw"
+
+- "/etc/hadoop/conf:/etc/hadoop/conf"
+
+- "/app:/app"
+
+- /mytmp:/tmp/mytmp
+
+2	
+woven_executor_more	platform	否	需要，17513	
+EUREKA主机名/端口
+
+MYSQL 主机名/用户名/密码	
+- "woven_logs:/woven_platform/logs:rw"
+
+- "woven_conf:/woven_platform/conf:rw"
+
+- "/etc/hadoop/conf:/etc/hadoop/conf"
+
+- "/app:/app"
+
+- /mytmp:/tmp/mytmp
+
+3	
+woven_livy	platform	
+是
+
+需要固定IP，因为需要提交SPARK JOB。需要预览JDBC数据集数据。
+
+需要，8998	无	
+- "woven_livy_logs:/woven_platform/livy-server/logs:rw"
+
+- "woven_livy_conf:/woven_platform/livy-server/conf:rw"
+
+- "/etc/hadoop/conf:/etc/hadoop/conf"
+
+- "/app:/app"
+
+- /mytmp:/tmp/mytmp
+
+1
+
+位于管理节点
+
+独立启动
+
+
+woven_server	platform	否	需要，17510	
+EUREKA主机名/端口
+
+MYSQL 主机名/用户名/密码	
+- "woven_logs:/woven_platform/logs:rw"
+
+- "woven_conf:/woven_platform/conf:rw"
+
+- "/etc/hadoop/conf:/etc/hadoop/conf"
+
+- "/app:/app"
+
+- /mytmp:/tmp/mytmp
+
+2	
+woven_executor_df	platform	
+是
+
+需要固定IP，因为需要提交SPARK JOB。
+
+不需要，17512
+
+
+
+EUREKA主机名/端口
+
+MYSQL 主机名/用户名/密码	
+- "woven_logs:/woven_platform/logs:rw"
+
+- "woven_conf:/woven_platform/conf:rw"
+
+- "/etc/hadoop/conf:/etc/hadoop/conf"
+
+- "/app:/app"
+
+- /mytmp:/tmp/mytmp
+
+每个节点独立起1个	
+docker-compose-woven.yml
+用于启动上面不需要使用主机网络的服务。
+
+version: '3.7'
+ 
+services:
+    woven_gateway:
+        image: woven_gateway:1.0
+        ports:
+            - "8515:8515"
+        environment:
+            WOVEN_BOOT: woven_gateway
+        volumes:
+            - "woven_gateway_logs:/woven_gateway/logs:rw"
+            - "woven_gateway_conf:/woven_gateway/conf:rw"
+            - /mytmp:/tmp/mytmp
+        extra_hosts:
+            - "baymax-deploy-01:192.168.1.15"
+            - "baymax-deploy-02:192.168.1.16"
+            - "baymax-deploy-03:192.168.1.17"
+        networks:
+            - backend
+        deploy:
+            replicas: 2
+            restart_policy:
+                condition: on-failure
+ 
+    woven_server:
+        image: woven_platform:1.0
+        ports:
+            - "17510:17510"
+        environment:
+            WOVEN_BOOT: woven_server
+        volumes:
+            - "woven_logs:/woven_platform/logs:rw"
+            - "woven_conf:/woven_platform/conf:rw"
+            - "/etc/hadoop/conf:/etc/hadoop/conf"
+            - "/app:/app"
+            - /mytmp:/tmp/mytmp
+        extra_hosts:
+            - "baymax-deploy-01:192.168.1.15"
+            - "baymax-deploy-02:192.168.1.16"
+            - "baymax-deploy-03:192.168.1.17"
+        networks:
+            - backend
+        deploy:
+            replicas: 2
+            restart_policy:
+                condition: on-failure
+ 
+    woven_discovery:
+        image: woven_platform:1.0
+        ports:
+            - "8518:8518"
+        environment:
+            WOVEN_BOOT: woven_discovery
+        volumes:
+            - "woven_logs:/woven_platform/logs:rw"
+            - "woven_conf:/woven_platform/conf:rw"
+            - "/etc/hadoop/conf:/etc/hadoop/conf"
+            - "/app:/app"
+            - /mytmp:/tmp/mytmp
+        extra_hosts:
+            - "baymax-deploy-01:192.168.1.15"
+            - "baymax-deploy-02:192.168.1.16"
+            - "baymax-deploy-03:192.168.1.17"
+        networks:
+            - backend
+        deploy:
+            replicas: 1
+            restart_policy:
+                condition: on-failure
+ 
+    woven_pipeline:
+        image: woven_platform:1.0
+        restart: always
+        ports:
+            - "17511:17511"
+        environment:
+            WOVEN_BOOT: woven_pipeline
+        volumes:
+            - "woven_logs:/woven_platform/logs:rw"
+            - "woven_conf:/woven_platform/conf:rw"
+            - "/etc/hadoop/conf:/etc/hadoop/conf"
+            - "/app:/app"
+            - /mytmp:/tmp/mytmp
+        extra_hosts:
+            - "baymax-deploy-01:192.168.1.15"
+            - "baymax-deploy-02:192.168.1.16"
+            - "baymax-deploy-03:192.168.1.17"
+        networks:
+            - backend
+        deploy:
+            replicas: 2
+            restart_policy:
+                condition: on-failure
+ 
+    woven_executor_more:
+        image: woven_platform:1.0
+        ports:
+            - "17513:17513"
+        environment:
+            WOVEN_BOOT: woven_executor_more
+        volumes:
+            - "woven_logs:/woven_platform/logs:rw"
+            - "woven_conf:/woven_platform/conf:rw"
+            - "/etc/hadoop/conf:/etc/hadoop/conf"
+            - "/app:/app"
+            - /mytmp:/tmp/mytmp
+        extra_hosts:
+            - "baymax-deploy-01:192.168.1.15"
+            - "baymax-deploy-02:192.168.1.16"
+            - "baymax-deploy-03:192.168.1.17"
+        networks:
+            - backend
+        deploy:
+            replicas: 2
+            restart_policy:
+                condition: on-failure
+ 
+    woven_livy:
+        image: woven_platform:1.0
+        ports:
+            - "8998:8998"
+        environment:
+            WOVEN_BOOT: woven_livy
+        volumes:
+            - "woven_livy_logs:/woven_platform/livy-server/logs:rw"
+            - "woven_livy_conf:/woven_platform/livy-server/conf:rw"
+            - "/etc/hadoop/conf:/etc/hadoop/conf"
+            - "/app:/app"
+            - /mytmp:/tmp/mytmp
+        extra_hosts:
+            - "baymax-deploy-01:192.168.1.15"
+            - "baymax-deploy-02:192.168.1.16"
+            - "baymax-deploy-03:192.168.1.17"
+        networks:
+            - backend
+        deploy:
+            replicas: 1
+            restart_policy:
+                condition: on-failure
+ 
+volumes:
+    woven_gateway_logs:
+    woven_gateway_conf:
+    woven_logs:
+    woven_conf:
+    woven_livy_logs:
+    woven_livy_conf:
+ 
+networks:
+    backend:
+启动该yml：
+
+docker stack deploy -c docker-compose-woven.yaml woven
+
+停止该yml：
+
+docker stack rm woven
+
+docker-compose-woven-executor-df.yml
+version: '3.7'
+ 
+services:
+    woven_executor_df:
+        image: woven_platform:1.0
+        ports:
+            - "17512:17512"
+        environment:
+            WOVEN_BOOT: woven_executor_df
+        volumes:
+            - "woven_logs:/woven_platform/logs:rw"
+            - "woven_conf:/woven_platform/conf:rw"
+            - "/etc/hadoop/conf:/etc/hadoop/conf"
+            - "/app:/app"
+        network_mode: "host"
+        extra_hosts:
+            - "baymax-deploy-01:192.168.1.15"
+            - "baymax-deploy-02:192.168.1.16"
+            - "baymax-deploy-03:192.168.1.17"
+ 
+volumes:
+    woven_logs:
+    woven_conf:
+启动：
+
+docker-compose -f docker-compose-dfexecutor.yaml up -d
+
+停止：
+
+docker-compose -f docker-compose-dfexecutor.yaml stop
+
+docker-compose-woven-mysql-zk.yml
+version: '3.7'
+ 
+services:
+    zookeeper1:
+        image: zookeeper:latest
+        container_name: zk1
+        ports:
+            - "2181:2181"
+        environment:
+            ZOO_MY_ID: 1
+            ZOO_SERVERS: server.1=0.0.0.0:2888:3888 server.2=zk2:2888:3888 server.3=zk3:2888:3888
+    zookeeper2:
+        image: zookeeper:latest
+        container_name: zk2
+        ports:
+            - "2182:2181"
+        environment:
+            ZOO_MY_ID: 2
+            ZOO_SERVERS: server.1=zk1:2888:3888 server.2=0.0.0.0:2888:3888 server.3=zk3:2888:3888
+    zookeeper3:
+        image: zookeeper:latest
+        container_name: zk3
+        ports:
+            - "2183:2181"
+        environment:
+            ZOO_MY_ID: 3
+            ZOO_SERVERS: server.1=zk1:2888:3888 server.2=zk2:2888:3888 server.3=0.0.0.0:2888:3888
+ 
+    woven_mysql:
+        image: mysql:5.7
+        environment:
+            MYSQL_ROOT_PASSWORD: merce
+        ports:
+            - "3306:3306"
+        volumes:
+            - "mysql_conf_d:/etc/mysql/mysql.conf.d:rw"
+            - "mysql_logs:/var/mysql/logs:rw"
+            - "mysql_data:/var/lib/mysql:rw"
+            - /mytmp:/tmp/mytmp
+        network_mode: "host"
+ 
+volumes:
+    mysql_data:
+    mysql_logs:
+    mysql_conf_d:
+启动：
+
+docker-compose -f docker-compose-mysql.yaml up -d
+
+停止：
+
+docker-compose -f docker-compose-mysql.yaml stop
+
+HDFS/SPARK包安装
+在各swarm主机上每个节点都需要安装hdp和spark包，因为platform和executor运行依赖它们。见/app以及/etc/hadoop/conf卷的映射。
+
+HADOOP集群
+HADOOP集群可以使用docker容器（测试使用）。
+
+实际部署时大部分是物理集群。
+
+下载镜像
+uhopper/hadoop-spark:2.1.2_2.8.1         211cc8940c9c        19 months ago       689MB
+
+uhopper/hadoop-namenode:2.8.1               9acf91db013c        19 months ago       550MB
+
+uhopper/hadoop-resourcemanager:2.8.1               639d25fbbc0b        19 months ago       550MB
+
+uhopper/hadoop-nodemanager:2.8.1               facf6d2713eb        19 months ago       550MB
+
+uhopper/hadoop-datanode:2.8.1               68b0d083cd48        19 months ago       550MB
+
+升级hadoop-spark:2.1.2_2.8.1到hadoop-spark:2.4.4_2.8.1
+https://hub.docker.com/r/uhopper/hadoop-spark/dockerfile
+
+将ENV SPARK_VERSION 2.1.2 改为2.4.4
+
+下载spark 2.4.4 tar包：https://www.apache.org/dist/spark/spark-2.4.4/spark-2.4.4-bin-without-hadoop.tgz
+
+创建文件：spark-entrypoint.sh spark-historyserver.sh spark-master.sh spark-slave.sh
+
+[root@baymax-deploy-03 uhopper]# cat spark-entrypoint.sh
+#!/bin/bash
+ 
+ 
+for c in `printenv | perl -sne 'print "$1 " if m/^SPARK_CONF_(.+?)=.*/'`; do
+    name=`echo ${c} | perl -pe 's/___/-/g; s/__/_/g; s/_/./g'`
+    var="SPARK_CONF_${c}"
+    value=${!var}
+    echo "Setting SPARK property $name=$value"
+    echo $name $value >> $SPARK_HOME/conf/spark-defaults.conf
+done
+ 
+case $1 in
+    master)
+        shift
+        exec /entrypoint.sh /spark-master.sh $@
+        ;;
+    slave)
+        shift
+        exec /entrypoint.sh /spark-slave.sh $@
+        ;;
+    historyserver)
+        shift
+        exec /entrypoint.sh /spark-historyserver.sh $@
+        ;;
+    submit)
+        shift
+        exec /entrypoint.sh spark-submit $@
+        ;;
+    *)
+         
+        if [ "$HADOOP_ON_CLASSPATH" = "1" ]; then
+            export CLASSPATH="$(hadoop classpath)${CLASSPATH:+:$CLASSPATH}"
+        fi
+ 
+        if [ "$SPARK_ON_CLASSPATH" = "1" ]; then
+            export CLASSPATH="${SPARK_HOME}/jars/*${CLASSPATH:+:$CLASSPATH}"
+        fi
+ 
+        exec /entrypoint.sh $@
+        ;;
+esac
+ 
+[root@baymax-deploy-03 uhopper]# cat spark-master.sh
+#!/bin/sh
+ 
+spark-class org.apache.spark.deploy.master.Master $@
+ 
+[root@baymax-deploy-03 uhopper]# cat spark-slave.sh
+#!/bin/sh
+ 
+spark-class org.apache.spark.deploy.worker.Worker $@
+ 
+[root@baymax-deploy-03 uhopper]# cat spark-historyserver.sh
+#!/bin/sh
+ 
+spark-class org.apache.spark.deploy.history.HistoryServer
+ 
+[root@baymax-deploy-03 uhopper]# ls -l
+total 161320
+-rw-r--r-- 1 root root      1040 Sep 18 15:39 Dockerfile
+-rw-r--r-- 1 root root 165169722 Sep 18 15:34 spark-2.4.4-bin-without-hadoop.tgz
+-rwxr-xr-x 1 root root      1013 Sep 18 15:47 spark-entrypoint.sh
+-rwxr-xr-x 1 root root        69 Sep 18 15:47 spark-historyserver.sh
+-rwxr-xr-x 1 root root        64 Sep 18 15:47 spark-master.sh
+-rwxr-xr-x 1 root root        64 Sep 18 15:47 spark-slave.sh
+执行：docker build --force-rm --tag uhopper/hadoop-spark:2.4.4_2.8.1 .
+
+docker-compose文件
+所有容器以主机网络模式启动。主机名为baymax-deploy-03。设好目录映射。
+
+[root@baymax-deploy-03 ~]# cat docker-compose-hdfs-yarn-spark.yaml
+version: '2'
+ 
+services:
+  namenode:
+    image: uhopper/hadoop-namenode:2.8.1
+ 
+    # 配置好 docker 内的假域名
+    hostname: baymax-deploy-03
+    container_name: namenode
+    network_mode: "host"
+    volumes:
+      # 自行修改数据卷的映射位置
+      - /data/namenode:/hadoop/dfs/name
+      - /mytmp:/tmp/mytmp
+    environment:
+      - CLUSTER_NAME=datanode1
+      - CLUSTER_NAME=datanode2
+      - CLUSTER_NAME=datanode3
+      # 配置 hdfs 用户权限问题,不需要只允许 hadoop 用户访问
+      - HDFS_CONF_dfs_permissions=false
+ 
+  datanode1:
+    image: uhopper/hadoop-datanode:2.8.1
+    hostname: baymax-deploy-03
+    container_name: datanode1
+    network_mode: "host"
+    volumes:
+      - /datanode1:/hadoop/dfs/data
+      - /mytmp:/tmp/mytmp
+    environment:
+      # 等价于在 core-site.xml 中配置 fs.defaultFS
+      - CORE_CONF_fs_defaultFS=hdfs://baymax-deploy-03:8020
+      # 等价于在 hdfs-site.xml 中配置 dfs.datanode.address
+      - HDFS_CONF_dfs_datanode_address=0.0.0.0:50010
+      # dfs.datanode.ipc.address 不使用默认端口的意义是在同一机器起多个 datanode，暴露端口需要不同
+      - HDFS_CONF_dfs_datanode_ipc_address=0.0.0.0:50020
+      # dfs.datanode.http.address
+      - HDFS_CONF_dfs_datanode_http_address=0.0.0.0:50075
+ 
+  datanode2:
+    image: uhopper/hadoop-datanode:2.8.1
+    hostname: baymax-deploy-03
+    container_name: datanode2
+    network_mode: "host"
+    volumes:
+      - /datanode2:/hadoop/dfs/data
+      - /mytmp:/tmp/mytmp
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://baymax-deploy-03:8020
+      - HDFS_CONF_dfs_datanode_address=0.0.0.0:50012
+      - HDFS_CONF_dfs_datanode_ipc_address=0.0.0.0:50022
+      - HDFS_CONF_dfs_datanode_http_address=0.0.0.0:50072
+ 
+  datanode3:
+    image: uhopper/hadoop-datanode:2.8.1
+    hostname: baymax-deploy-03
+    container_name: datanode3
+    network_mode: "host"
+    volumes:
+      - /datanode3:/hadoop/dfs/data
+      - /mytmp:/tmp/mytmp
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://baymax-deploy-03:8020
+      - HDFS_CONF_dfs_datanode_address=0.0.0.0:50013
+      - HDFS_CONF_dfs_datanode_ipc_address=0.0.0.0:50023
+      - HDFS_CONF_dfs_datanode_http_address=0.0.0.0:50073
+ 
+  resourcemanager:
+    image: uhopper/hadoop-resourcemanager:2.8.1
+    hostname: baymax-deploy-03
+    container_name: resourcemanager
+    network_mode: "host"
+    volumes:
+      - /mytmp:/tmp/mytmp
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://baymax-deploy-03:8020
+      - YARN_CONF_yarn_log___aggregation___enable=true
+ 
+  nodemanager:
+    image: uhopper/hadoop-nodemanager:2.8.1
+    hostname: baymax-deploy-03
+    container_name: nodemanager
+    network_mode: "host"
+    volumes:
+      - /mytmp:/tmp/mytmp
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://baymax-deploy-03:8020
+      - YARN_CONF_yarn_resourcemanager_hostname=baymax-deploy-03
+      - YARN_CONF_yarn_log___aggregation___enable=true
+      - YARN_CONF_yarn_nodemanager_remote___app___log___dir=/app-logs
+ 
+  spark:
+    image: uhopper/hadoop-spark:2.1.2_2.8.1
+    hostname: baymax-deploy-03
+    container_name: spark
+    network_mode: "host"
+    volumes:
+      - /mytmp:/tmp/mytmp
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://baymax-deploy-03:8020
+      - YARN_CONF_yarn_resourcemanager_hostname=baymax-deploy-03
+    command: tail -f /var/log/dmesg
+启动容器
+docker-compose -f docker-compose-hdfs-yarn-spark.yaml up > start.log
+
+YARN配置文件改动
+下面标红的配置项必须加上，否则资源分配会有问题。需要按实际的资源设置。
+
+所有容器的/etc/hadoop/yarn-site.xml都要拷贝成下面的设置。
+
+[root@baymax-deploy-03 mytmp]# cat yarn-site.xml
+<?xml version="1.0"?>
+<!--
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+ 
+    http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License. See accompanying LICENSE file.
+-->
+<configuration>
+ 
+<!-- Site specific YARN configuration properties -->
+ 
+<property>
+    <name>yarn.resourcemanager.hostname</name>
+    <value>baymax-deploy-03</value>
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.hostname</name>
+    <value>baymax-deploy-03</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.hostname</name>
+    <value>baymax-deploy-03</value>
+</property>
+ 
+<property>
+    <name>yarn.resourcemanager.bind-host</name>
+    <value>0.0.0.0</value>
+</property>
+ 
+<property>
+    <name>yarn.resourcemanager.address</name>
+    <value>${yarn.resourcemanager.hostname}:8050</value>
+</property>
+     
+<property>
+    <name>yarn.resourcemanager.admin.address</name>
+    <value>${yarn.resourcemanager.hostname}:8141</value>
+</property>
+ 
+<property>
+    <name>yarn.resourcemanager.resource-tracker.address</name>
+    <value>${yarn.resourcemanager.hostname}:8025</value>
+</property>
+     
+<property>
+    <name>yarn.resourcemanager.scheduler.address</name>
+    <value>${yarn.resourcemanager.hostname}:8030</value>
+</property>
+ 
+<property>
+    <name>yarn.resourcemanager.webapp.address</name>
+    <value>${yarn.resourcemanager.hostname}:8088</value>
+</property>
+ 
+<property>
+    <name>yarn.resourcemanager.webapp.https.address</name>
+    <value>${yarn.resourcemanager.hostname}:8090</value>
+</property>
+     
+<property>
+    <name>yarn.resourcemanager.am.max-attempts</name>
+    <value>2</value>
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.address</name>
+    <value>${yarn.nodemanager.hostname}:45454</value>
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.resource.cpu-vcores</name>
+    <value>2</value>
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.resource.memory-mb</name>
+    <value>16384</value>
+</property>
+ 
+<property> 
+   <name>yarn.scheduler.minimum-allocation-vcores</name> 
+   <value>1</value> 
+</property>
+ 
+<property> 
+   <name>yarn.scheduler.maximum-allocation-vcores</name> 
+   <value>2</value> 
+</property> 
+  
+<property> 
+   <name>yarn.scheduler.minimum-allocation-mb</name> 
+   <value>1024</value> 
+</property> 
+ 
+<property> 
+   <name>yarn.scheduler.maximum-allocation-mb</name> 
+   <value>16384</value> 
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.pmem-check-enabled</name>
+    <value>false</value>
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.vmem-check-enabled</name>
+    <value>false</value>
+</property>
+ 
+<property>
+    <name>yarn.log-aggregation-enable</name>
+    <value>true</value>
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.bind-host</name>
+    <value>0.0.0.0</value>
+</property>
+ 
+<property>
+   <name>hadoop.registry.rm.enabled</name>
+   <value>true</value>
+</property>
+ 
+<property>
+    <name>yarn.log.server.url</name>
+    <value>http://baymax-deploy-03:19888/jobhistory/logs</value>
+</property>
+     
+<property>
+    <name>yarn.log.server.web-service.url</name>
+    <value>http://baymax-deploy-03:8188/ws/v1/applicationhistory</value>
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.log-aggregation.roll-monitoring-interval-seconds</name>
+    <value>3600</value>
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.remote-app-log-dir</name>
+    <value>/app-logs</value>
+</property>
+ 
+<property>
+    <description>向客户端指示是否启用时间线服务。如果启用，最终用户使用的timeline客户端库将发布实体和事件发送到时间线服务器.</description>
+    <name>yarn.timeline-service.enabled</name>
+    <value>true</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.bind-host</name>
+    <value>0.0.0.0</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.address</name>
+    <value>${yarn.timeline-service.hostname}:10200</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.webapp.address</name>
+    <value>${yarn.timeline-service.hostname}:8188</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.webapp.https.address</name>
+    <value>${yarn.timeline-service.hostname}:8190</value>
+</property>
+ 
+<property>
+    <description>向资源管理器和客户端指示是否历史记录-服务是否启用。如果启用，资源管理器将启动
+      记录工时记录服务可以使用历史数据。同样，当应用程序如果启用此选项，请完成.</description>
+    <name>yarn.timeline-service.generic-application-history.enabled</name>
+    <value>true</value>
+</property>
+ 
+<property>
+    <description>Store class name for history store, defaulting to file system store</description>
+    <name>yarn.timeline-service.generic-application-history.store-class</name>
+    <value>org.apache.hadoop.yarn.server.applicationhistoryservice.FileSystemApplicationHistoryStore</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.ttl-enable</name>
+    <value>true</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.recovery.enabled</name>
+    <value>true</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.leveldb-timeline-store.path</name>
+    <value>/hadoop/yarn/timeline</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.state-store-class</name>
+    <value>org.apache.hadoop.yarn.server.timeline.recovery.LeveldbTimelineStateStore</value>
+</property>
+ 
+<property>
+      <name>yarn.timeline-service.store-class</name>
+      <value>org.apache.hadoop.yarn.server.timeline.LeveldbTimelineStore</value>
+    </property>
+ 
+<property>
+    <name>yarn.timeline-service.http-authentication.proxyuser.root.groups</name>
+    <value>*</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.http-authentication.proxyuser.root.hosts</name>
+    <value>${yarn.timeline-service.hostname}</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.http-authentication.simple.anonymous.allowed</name>
+    <value>true</value>
+</property>
+ 
+<property>
+    <name>yarn.timeline-service.http-authentication.type</name>
+    <value>simple</value>
+</property>
+ 
+</configuration>
+spark容器中的spark-env.sh中加入下行：
+
+export HADOOP_CONF_DIR=/etc/hadoop
+spark-defaults.conf做如下修改：hdfs路径设好
+
+[root@baymax-deploy-03 mytmp]# cat spark-defaults.conf
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+ 
+# Default system properties included when running spark-submit.
+# This is useful for setting default environmental settings.
+ 
+# Example:
+spark.master                     spark://baymax-deploy-03:7077
+spark.eventLog.enabled           true
+spark.eventLog.dir               hdfs://baymax-deploy-03:8020/tmp/spark-events
+spark.eventLog.compress          true
+# spark.serializer                 org.apache.spark.serializer.KryoSerializer
+# spark.driver.memory              5g
+# spark.executor.extraJavaOptions  -XX:+PrintGCDetails -Dkey=value -Dnumbers="one two three"
+启动spark master worker
+进入容器：docker exec -it spark /bin/bash
+
+#启动master
+sbin/start-master.sh
+ 
+#添加一个worker
+echo baymax-deploy-03 > conf/slaves
+ 
+#启动worker
+sbin/start-slave.sh -c 2 -m 2048M spark://baymax-deploy-03:7077
+验证spark-submit
+验证三种方法提交spark job
+
+进入容器：docker exec -it spark /bin/bash
+
+#local模式
+spark-submit --class org.apache.spark.examples.JavaSparkPi --master local examples/jars/spark-examples_2.11-2.4.4.jar
+ 
+#spark master模式
+spark-submit --class org.apache.spark.examples.JavaSparkPi --master spark://baymax-deploy-03:7077 examples/jars/spark-
+examples_2.11-2.4.4.jar
+ 
+#yarn模式
+spark-submit --class org.apache.spark.examples.JavaSparkPi --master yarn examples/jars/spark-examples_2.11-2.4.4.jar
+swarm节点建立spark client环境
+以baymax-deploy-02为例：
+
+在baymax-deploy-02节点上创建 /app目录
+下载https://www.apache.org/dist/spark/spark-2.4.4/spark-2.4.4-bin-hadoop2.7.tgz
+将spark-2.4.4-bin-hadoop2.7.tgz解压到baymax-deploy-02节点的/app目录下。
+ln -s /app/spark-2.4.4-bin-hadoop2.7 /app/spark2.4
+将spark镜像中的/etc/hadoop/拷贝到baymax-deploy-02节点的/etc/hadoop/conf目录下。
+将spark镜像中的/opt/hadoop-2.8.1/share/拷贝到baymax-deploy-02节点的/opt/hadoop-2.8.1/share/目录下。
+创建/app/spark2.4/conf/spark-env.sh
+
+[root@baymax-deploy-02 woven_gateway_conf]# cat /app/spark2.4/conf/spark-env.sh
+export SPARK_DIST_CLASSPATH=/etc/hadoop/conf:/opt/hadoop-2.8.1/share/hadoop/common/lib/*:/opt/hadoop-2.8.1/share/hadoop/common/*:/opt/hadoop-2.8.1/share/hadoop/hdfs:/opt/hadoop-2.8.1/share/hadoop/hdfs/lib/*:/opt/hadoop-2.8.1/share/hadoop/hdfs/*:/opt/hadoop-2.8.1/share/hadoop/yarn/lib/*:/opt/hadoop-2.8.1/share/hadoop/yarn/*:/opt/hadoop-2.8.1/share/hadoop/mapreduce/lib/*:/opt/hadoop-2.8.1/share/hadoop/mapreduce/*:/contrib/capacity-scheduler/*.jar
+export HADOOP_CONF_DIR=/etc/hadoop/conf
+export SPARK_HISTORY_OPTS="-Dspark.history.ui.port=18080 -Dspark.history.retainedApplications=3 -Dspark.history.fs.logDirectory=hdfs://baymax-deploy-03/tmp/spark-events -Dspark.history.fs.cleaner.interval=1d -Dspark.history.fs.cleaner.maxAge=2d"
+验证spark-submit
+解决web端无法查看spark job日志
+yarn-site.xml添加：
+
+<property>
+    <name>yarn.log-aggregation-enable</name>
+    <value>true</value>
+</property>
+mapred-site.xml 添加：
+
+<configuration>
+ 
+<property>
+    <name>yarn.nodemanager.hostname</name>
+    <value>baymax-deploy-03</value>
+</property>
+ 
+<property>
+    <name>yarn.nodemanager.bind-host</name>
+    <value>0.0.0.0</value>
+</property>
+ 
+<property>
+<!-- 表示提交到hadoop中的任务采用yarn来运行，要是已经有该配置则无需重复配置 -->
+    <name>mapreduce.framework.name</name>
+    <value>yarn</value>
+</property>
+ 
+<property> <!--日志监控服务的地址，一般填写为nodenode机器地址 -->
+    <name>mapreduce.jobhistroy.address</name>
+    <value>${yarn.nodemanager.hostname}:10020</value>
+</property>
+ 
+<property>
+    <name>mapreduce.jobhistroy.webapp.address</name>
+    <value>${yarn.nodemanager.hostname}:19888</value>
+</property>
+</configuration>
+重启namenode容器
+
+bin/stop-dfs.sh
+bin/start-dfs.sh
+bin/stop-yarn.sh
+bin/start-yarn.sh
+在namenode容器上执行
+
+sbin/mr-jobhistory-daemon.sh start historyserver
+见https://blog.csdn.net/lisongjia123/article/details/78639058
+
+其它组件
+woven-app ：
+
+去掉woven-app-env.sh里的JAVA_HOME，使用本机的JAVA_HOME
+woven-app依赖ZOOKEEPER
+conf/woven-app.properties里设置好ZK，RESOURCE MANAgatewatHDFS等地址
+webapp.zip解压到web-ui目录
+webapp.zip解压到gateway的conf目录下，一定不要用符号连接代替，因为容器访问不到！！！ 所有节点都要照此办理。
+登陆界面：http://192.168.1.15:8515
+申请license
+租户：default  admin/123456
+
+ES ：
+
+问题
+每次gateway容器启动都要激活码问题
+激活主键随gateway容器的变化而变化。
+
+如果重启或更新或重新创建了gateway容器，由于主键变了，登陆时都会显示未激活，需要重新做激活。
+
+这会给运维带来非常大的不便。
+
