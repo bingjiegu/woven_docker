@@ -1,0 +1,399 @@
+
+转至元数据结尾
+由 顾冰洁创建, 最后修改于三月 11, 2020转至元数据起始
+说明：本文中执行操作时，均需使用root权限并关闭防火墙. 本文中所用IP地址192.168.2.81为示例，实际使用中请更改为自己本地IP地址
+
+镜像及其他全部文件本地服务器放置位置: merce@192.168.1.84:/app/docker_use， 可自行下载使用
+
+！！！！！！注意：执行操作前请先关闭防火墙，然后重启docker服务！！！！！！
+
+1. 物料准备&&环境准备
+2. 部署docker环境安装compose
+3. 将所需镜像载入本地镜像仓库
+4. 创建本地目录: /app ,  /app/merce,  /mytmp,   /etc/hadoop/conf ，/mysql/init 
+5. 查看本地主机IP并写入hosts文件，例：192.168.2.81
+6. 文件放置: (配置文件，compose yaml文件，MySQL文件，集群使用文件)
+6.1.  服务使用配置文件下载
+6.2.  配置Hadoop目录
+6.3.  配置spark环境
+6.4.   /mysql/init 下放置MySQL初始化脚本
+6.5.   /app/merce 目录下放置全部 compose yaml 文件
+7.  按照顺序启动容器
+8. 更新服务配置文件
+9. 停止服务并重新启动服务
+10. 更新数据库中 ACT_RU_JOB,  ACT_RU_EXECUTION,  merce_flow_execution_output 表结构
+11. 打开 http://192.168.2.81:8123，查看各服务是否注册成功
+12. 访问 http://192.168.2.81:8515, 输入许可证号进行激活，成功后即可正常访问登录页面
+13. 常见问题：
+1. 物料准备&&环境准备
+环境准备：
+
+[root@baymax-deploy-03 conf]# systemctl disable firewalld  # 永久关闭防火墙
+[root@baymax-deploy-03 conf]# systemctl restart docker  # 重启docker服务
+物料准备：
+
+说明：打包镜像注意事项–打包APP镜像和gateway镜像时，需要事先把UI包解压后（ webapp）放到对应的目录下。merce_app放置在woven-ui目录下， merce_gateway放置在conf目录下
+
+1. 一台物理机/虚拟机，要求 系统为 centos7以上版本
+2. spark安装包：spark24.tar.gz
+3. 镜像准备：
+woven_app:lateset     # merce_app 镜像，tag为latest
+woven_platform:latest # platform镜像， tag为latest
+woven_gateway:latest  # gateway镜像， tag为latest
+woven_logserver:latest  # gateway镜像， tag为latest
+uhopper/hadoop-spark:2.4.4_2.8.1      # Hadoop集群使用spark镜像
+uhopper/hadoop-namenode:2.8.1         # Hadoop集群使用namenode镜像
+uhopper/hadoop-resourcemanager:2.8.1  # Hadoop集群使用resourcemanage镜像
+uhopper/hadoop-nodemanager:2.8.1      # Hadoop集群使用nodemanage镜像
+uhopper/hadoop-datanode:2.8.1         # Hadoop集群使用datanode镜像
+mysql:5.7    # mysql镜像
+centos:7.2.1511  # centos基础镜像
+elasticsearch:5.6 # elasticsearch镜像
+logstash:2.4      # logstash镜像
+consul:latest    # consul镜像
+4. 一个GitHub账号
+2. 部署docker环境安装compose
+说明：参考链接 https://www.jianshu.com/p/2dae7b13ce2f
+
+1. root权限
+    #sudo yum update
+    #sudo yum install -y yum-utils device-mapoper-persistent-data lvm2
+ 
+2. 添加Docker稳定版本的yum软件源( http://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo)
+    #sudo yum-config-manager --add-repo\
+   https://download.docker.com/linux/centos/docker-ce.repo
+ 
+3. 更新yum软件源缓存，并安装Docker ce
+    #sudo yum update
+    #sudo yum install -y docker-ce
+ 
+4. 启动Docker服务
+   #sudo systemctl start docker
+ 
+5. 验证是否安装成功(有client和service两部分表示docker安装启动都成功了)
+   [root@baymax-deploy-03 conf]# docker version
+   [root@baymax-deploy-03 conf]# docker version
+Client: Docker Engine - Community
+ Version:           19.03.5
+ API version:       1.40
+ Go version:        go1.12.12
+ Git commit:        633a0ea
+ Built:             Wed Nov 13 07:25:41 2019
+ OS/Arch:           linux/amd64
+ Experimental:      false
+ 
+Server: Docker Engine - Community
+ Engine:
+  Version:          19.03.5
+  API version:      1.40 (minimum version 1.12)
+  Go version:       go1.12.12
+  Git commit:       633a0ea
+  Built:            Wed Nov 13 07:24:18 2019
+  OS/Arch:          linux/amd64
+  Experimental:     false
+ containerd:
+  Version:          1.2.10
+  GitCommit:        b34a5c8af56e510852c35414db4c1f4fa6172339
+ runc:
+  Version:          1.0.0-rc8+dev
+  GitCommit:        3e425f80a8c931f88e6d94a8c831b9d5aa481657
+ docker-init:
+  Version:          0.18.0
+  GitCommit:        fec3683
+6. 安装compose
+   # pip install docker-compose
+7. 查看docke-compose版本
+   [root@baymax-deploy-03 _data]# docker-compose --version
+   docker-compose version 1.24.1, build 4667896b
+3. 将所需镜像载入本地镜像仓库
+说明：镜像tag若有变化，请以实际需要为准
+
+ 方法1：从私有镜像仓库下载镜像。以测试环境私有镜像仓库地址举例： 192.168.2.81:5000             
+
+[root@baymax-deploy-03 merce]# docker pull 192.168.2.81:5000/woven_app:lateset
+[root@baymax-deploy-03 merce]# docker pull 192.168.2.81:5000/woven_platform:latest
+[root@baymax-deploy-03 merce]# docker pull 192.168.2.81:5000/woven_gateway:latest
+[root@baymax-deploy-03 merce]# docker pull 192.168.2.81:5000/woven_logserver:latest
+[root@baymax-deploy-03 merce]# docker pull 192.168.2.81:5000/uhopper/hadoop-spark:2.4.4_2.8.1
+[root@baymax-deploy-03 merce]# docker pull 192.168.2.81:5000/uhopper/hadoop-namenode:2.8.1
+[root@baymax-deploy-03 merce]# docker pull 192.168.2.81:5000/uhopper/hadoop-resourcemanager:2.8.1
+[root@baymax-deploy-03 merce]# docker pull 192.168.2.81:5000/uhopper/hadoop-nodemanager:2.8.1
+[root@baymax-deploy-03 merce]# docker pull 192.168.2.81:5000/uhopper/hadoop-datanode:2.8.1
+[root@baymax-deploy-03 merce]# docker pull 192.168.2.81:5000/mysql:5.7
+[root@baymax-deploy-03 merce]# docker pull 192.168.2.81:5000/centos:7.2.1511
+[root@baymax-deploy-03 merce]# docker pull 192.168.2.81:5000/consul:latest
+[root@baymax-deploy-03 merce]# docker pull 192.168.2.81:5000/elasticsearch:5.6
+[root@baymax-deploy-03 merce]# docker pull 192.168.2.81:5000/logstash:2.4
+方法2：载入tar包形式的镜像文件 (请以实际提供的tar名称为准)
+
+[root@baymax-deploy-03 merce]# docker load -i woven_app_lateset.tar
+[root@baymax-deploy-03 merce]# docker load -i woven_platform_latest.tar
+[root@baymax-deploy-03 merce]# docker load -i woven_gateway_latest.tar
+[root@baymax-deploy-03 merce]# docker load -i woven_logserver_latest.tar
+[root@baymax-deploy-03 merce]# docker load -i uhopper_hadoop-spark_2.4.4_2.8.1.tar
+[root@baymax-deploy-03 merce]# docker load -i uhopper-hadoop-namenode_2.8.1.tar.tar
+[root@baymax-deploy-03 merce]# docker load -i uhopper-hadoop-resourcemanager_2.8.1.tar
+[root@baymax-deploy-03 merce]# docker load -i uhopper-hadoop-nodemanager_2.8.1.tar
+[root@baymax-deploy-03 merce]# docker load -i uhopper-hadoop-datanode_2.8.1.tar
+[root@baymax-deploy-03 merce]# docker load -i consul_latest.tar
+[root@baymax-deploy-03 merce]# docker load -i mysql_5.7.tar
+[root@baymax-deploy-03 merce]# docker load -i centos_7.2.1511.tar
+[root@baymax-deploy-03 merce]# docker load -i elasticsearch_5.6.tar
+[root@baymax-deploy-03 merce]# docker load -i logstash_2.4.tar
+说明： consul, mysql, centos, elasticsearch所需镜像， 可从公共镜像仓库下载，或者直接导入镜像文件均可。公共镜像仓库下载命令如下：
+
+[root@baymax-deploy-03 merce]# docker pull consul:latest
+[root@baymax-deploy-03 merce]# docker pull mysql:5.7
+[root@baymax-deploy-03 merce]# docker pull centos:7.2.1511
+[root@baymax-deploy-03 merce]# docker pull elasticsearch:5.6
+4. 创建本地目录: /app ,  /app/merce,  /mytmp,   /etc/hadoop/conf ，/mysql/init 
+[root@baymax-deploy-03 /]# mkdir -p /app/merce
+[root@baymax-deploy-03 /]# cd /etc && mkdir -p hadoop/conf
+[root@baymax-deploy-03 /]# mkdir /mytmp
+[root@baymax-deploy-03 /]# mkdir -p /mysql/init
+5. 查看本地主机IP并写入hosts文件，例：192.168.2.81
+[root@baymax-deploy-03 /]# echo 192.168.2.81 baymax-deploy-03 >> /etc/hosts
+[root@baymax-deploy-03 /]# cat /etc/hosts
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+192.168.2.81 baymax-deploy-03
+6. 文件放置: (配置文件，compose yaml文件，MySQL文件，集群使用文件)
+6.1.  服务使用配置文件下载
+下载地址：https://github.com/bingjiegu/woven_docker/tree/master/all_conf_file
+
+
+
+6.2.  配置Hadoop目录
+目录 /etc/hadoop/conf 下放置Hadoop集群使用文件，下载地址: https://github.com/bingjiegu/woven_docker/tree/master/etc-hadoop-conf
+
+
+
+[root@baymax-deploy-03 /]# cd /etc/hadoop/conf
+[root@baymax-deploy-03 conf]# ls
+capacity-scheduler.xml  hadoop-env.sh               httpfs-env.sh            kms-env.sh            mapred-env.sh               ssl-client.xml.example
+configuration.xsl       hadoop-metrics2.properties  httpfs-log4j.properties  kms-log4j.properties  mapred-queues.xml.template  ssl-server.xml.example
+container-executor.cfg  hadoop-metrics.properties   httpfs-signature.secret  kms-site.xml          mapred-site.xml             yarn-env.cmd
+core-site.xml           hadoop-policy.xml           httpfs-site.xml          log4j.properties      mapred-site.xml.template    yarn-env.sh
+hadoop-env.cmd          hdfs-site.xml               kms-acls.xml             mapred-env.cmd        slaves                      yarn-site.xml
+目录/mytmp下放置容器挂载使用文件：https://github.com/bingjiegu/woven_docker/tree/master/mytmp-file
+
+
+
+[root@baymax-deploy-03 /]# cd /mytmp
+core-site.xml  hdfs-site.xml  slaves  spark-defaults.conf  spark-env.sh  yarn-site.xml
+
+
+6.3.  配置spark环境
+本地 目录 /app 下解压  spark24.tar.gz,，并新建 spark2.4 软连接
+
+[root@baymax-deploy-03 ~]# cd /app
+[root@baymax-deploy-03 app]# ls
+merce spark24.tar.gz
+ 
+[root@baymax-deploy-03 app]# tar xvf spark24.tar.gz
+[root@baymax-deploy-03 app]# ls
+merce  spark-2.4.4-bin-hadoop2.7  spark24.tar.gz
+ 
+[root@baymax-deploy-03 app]# ln -s spark-2.4.4-bin-hadoop2.7 spark2.4
+[root@baymax-deploy-03 app]# ls
+merce  spark2.4  spark-2.4.4-bin-hadoop2.7  spark24.tar.gz
+ 
+ 
+[root@baymax-deploy-03 app]# ll  # 确认软件接是否正确
+lrwxrwxrwx   1 root  root         25 Jan  2 18:09 spark2.4 -> spark-2.4.4-bin-hadoop2.7
+drwxr-xr-x  13 merce merce      4096 Aug 28 05:30 spark-2.4.4-bin-hadoop2.7
+-rw-r--r--   1 root  root  230090493 Nov 14 11:14 spark24.tar.gz
+drwxr-xr-x. 10 merce merce      4096 Jan  4 14:59 merce
+6.4.   /mysql/init 下放置MySQL初始化脚本
+脚本下载地址：https://github.com/bingjiegu/woven_docker/tree/master/sql_file/init_mysql
+
+
+
+6.5.   /app/merce 目录下放置全部 compose yaml 文件
+文件下载地址：https://github.com/bingjiegu/woven_docker/tree/master/compose_yaml
+
+
+
+[root@baymax-deploy-03 /]# cd /app/merce
+[root@baymax-deploy-03 merce]# ls
+consul_logstash_es_logserver.yaml  gateway.yaml  mysql.yaml  woven-app.yaml  docker-compose-hdfs-yarn-spark.yaml  platform.yaml
+7.  按照顺序启动容器
+[root@baymax-deploy-03 merce]# docker-compose -f docker-compose-hdfs-yarn-spark.yaml up -d   # 部署集群
+[root@baymax-deploy-03 merce]# docker-compose -f consul_logstash_es_logserver.yaml up -d  # 启动consul，elasticsearch, logstash, logserver
+[root@baymax-deploy-03 merce]# docker-compose -f mysql.yaml -f platform.yaml -f woven-app.yaml -f gateway.yaml up -d   # 启动baymax系统子服务
+说明：因服务间存在先后启动依赖关系，请按照指定顺序进行启动
+
+8. 更新服务配置文件
+说明：本地数据卷挂载地址默认为本地 /var/lib/docker/volumes，按照流程进行部署时，产生的数据卷应为如下名称：
+
+[root@baymax-deploy-03 mytmp]# cd /var/lib/docker/volumes/
+drwxr-xr-x. 3 root root        19 Dec 26 18:30 merce_app_conf      # woven_app 配置文件挂载目录
+drwxr-xr-x. 3 root root        19 Dec 26 18:30 merce_app_logs      # woven_app log文件挂载目录
+drwxr-xr-x. 3 root root        19 Dec 26 18:30 merce_gateway_conf  # woven_gateway 配置文件挂载目录
+drwxr-xr-x. 3 root root        19 Dec 26 18:30 merce_gateway_log   # woven_gateway log文件挂载目录
+drwxr-xr-x. 3 root root        19 Dec 26 18:30 merce_livy_conf     # woven_livy 配置文件挂载目录
+drwxr-xr-x. 3 root root        19 Dec 26 18:30 merce_livy_logs     # woven_livy log文件挂载目录
+drwxr-xr-x. 3 root root        19 Dec 26 18:30 merce_mysql_conf    # mysql 配置文件挂载目录
+drwxr-xr-x. 3 root root        19 Dec 26 18:30 merce_mysql_data    # mysql data挂载目录
+drwxr-xr-x. 3 root root        19 Dec 26 18:30 merce_mysql_log     # mysql log挂载目录
+drwxr-xr-x. 3 root root        19 Dec 26 18:30 merce_platform_conf # woven_platform 配置文件挂载目录
+drwxr-xr-x. 3 root root        19 Dec 26 18:30 merce_platform_logs # woven_platform log文件挂载目录
+drwxr-xr-x 3 root root         18 Jan  4 11:30 merce_es_config     # es容器config挂载目录
+drwxr-xr-x 3 root root         18 Jan  4 14:19 merce_es_logs       # es log挂载目录
+drwxr-xr-x 3 root root         18 Jan  3 11:30 merce_logserver_conf # woven_logserver配置文件挂载目录
+drwxr-xr-x 3 root root         18 Jan  3 11:30 merce_logserver_logs # woven_logserver log文件挂载目录
+drwxr-xr-x 3 root root         18 Jan  3 18:24 merce_logstash_info  # logstash 挂载本地目录
+8.1. 替换woven app配置文件：woven-app-env.sh  woven-app.properties
+[root@baymax-deploy-03 volumes]# cd /var/lib/docker/volumes/merce_app_conf/_data
+[root@baymax-deploy-03 _data]# ls
+log4j2.xml  provider.xml  provider.xml.1223  version  woven-app-env.sh  woven-app.properties
+8.2. 替换platform子服务配置文件: quartz-server.properties,woven-moreexecutor.properties, woven.properties, woven-dfexecutor.properties, woven-env.sh, woven-pipeline.properties, woven-server.properties
+[root@baymax-deploy-03 volumes]# cd /var/lib/docker/volumes/merce_platform_conf/_data
+[root@baymax-deploy-03 _data]# ls
+el.js       quartz-server.properties  version                      woven-discovery.properties  woven-moreexecutor.properties  woven.properties
+log4j2.xml  ReleaseNote.txt           woven-dfexecutor.properties  woven-env.sh                woven-pipeline.properties      woven-server.properties
+8.3. 替换gateway配置文件：woven-gateway-env.sh  woven-gateway.yaml 
+[root@baymax-deploy-03 volumes]# cd /var/lib/docker/volumes/merce_gateway_conf/_data
+[root@baymax-deploy-03 _data]# ls
+init  logback-spring.xml  version   woven-gateway-env.sh    woven-gateway.yaml
+8.4. 替换logserver配置文件：log4j2.xml  woven-logserver-env.sh  woven-logserver.properties
+[root@baymax-deploy-03 volumes]# cd /var/lib/docker/volumes/merce_logserver_conf/_data
+[root@baymax-deploy-03 _data]# ls
+log4j2.xml  mapping  provider.xml  version  woven-logserver-env.sh  woven-logserver.properties
+8.5. 替换 elasticsearch服务配置文件：elasticsearch.yml  log4j2.properties
+[root@baymax-deploy-03 volumes]# cd /var/lib/docker/volumes/merce_es_config/_data
+[root@baymax-deploy-03 _data]# ls
+elasticsearch.yml  log4j2.properties  scripts
+8.6. 更改logstash服务配置文件信息：woven-es.cfg, 将文件中 hosts 替换为本地主机IP
+[root@baymax-deploy-03 volumes]# cd /var/lib/docker/volumes/merce_logstash_info/_data/config
+[root@baymax-deploy-03 volumes]# vi woven-es.cfg
+input {
+    file {
+      path => ["/platform_logs/woven-server/woven-server_json.log", "/platform_logs/df-executor/df-executor_json.log", "/platform_logs/pipeline-server/pipeline-server_json.log","/platform_logs/more-executors/more-executors_json.log"]
+      type => "logs"
+      codec => json {
+          charset => "UTF-8"
+      }
+    }
+}
+output {
+ 
+        stdout{codec=>plain}
+ 
+        elasticsearch {
+                index => "log4j2_bm-%{+YYYY-ww}"
+                hosts => ["192.168.1.76:9201"]
+                user => "elastic"
+                password => "changeme"
+        }
+}
+8.6  替换livy的配置文件：livy.conf，livy-env.sh
+
+下载地址：https://github.com/bingjiegu/woven_docker/tree/master/all_conf_file/platform/livy
+
+[root@bogon _data]# ls
+livy-client.conf.template  livy.conf  livy.conf.template  livy-env.sh  livy-env.sh.template  log4j.properties.template  spark-blacklist.conf.template
+
+
+
+
+9. 停止服务并重新启动服务
+[root@baymax-deploy-03 merce]# docker-compose -f consul_logstash_es_logserver.yaml stop
+[root@baymax-deploy-03 merce]# docker-compose -f consul_logstash_es_logserver.yaml start
+[root@baymax-deploy-03 merce]# docker-compose -f mysql.yaml -f platform.yaml -f woven_app.yaml -f gateway.yaml  stop
+[root@baymax-deploy-03 merce]# docker-compose -f mysql.yaml -f platform.yaml -f woven_app.yaml -f gateway.yaml  start
+说明： 
+
+1. 在不更改数据卷挂载目录的前提下，MySQL容器第一次启动时，会根据给定的初始化SQL脚本，进行数据库表的初始化，之后再停止MySQL容器、销毁MySQL容器重建，也不会再次执行MySQL数据库的初始化，数据库中表数据可一直保留
+
+2. 挂载数据卷目录中的配置文件更新后，对应的容器中也会是最新的配置文件，通过docker stop命令停止服务/docker start命令启动服务，使新的配置信息生效
+
+10. 更新数据库中 ACT_RU_JOB,  ACT_RU_EXECUTION,  merce_flow_execution_output 表结构
+更新表使用SQL文件下载地址：https://github.com/bingjiegu/woven_docker/tree/master/sql_file/update_tables
+
+方法1：进入MySQL容器，连接MySQL并更新表
+
+1. 将更新表用SQL文件放在本地/mytmp目录下
+[root@baymax-deploy-03 mytmp]# ls
+ACT.sql  core-site.xml  hdfs-site.xml  merce-default.sql  merce_flow_execution_output.sql  slaves  spark-defaults.conf  spark-env.sh  yarn-site.xml
+2. 进入MySQL容器进行操作
+[root@baymax-deploy-03 mytmp]# docker exec -it mysql /bin/bash
+root@baymax-deploy-03:/# cd /var/lib/mysql
+root@baymax-deploy-03:/var/lib/mysql# cp /tmp/mytmp/ACT.sql .   # 本地/mytmp 目录挂载容器/tmp/mytmp目录
+root@baymax-deploy-03:/var/lib/mysql# cp /tmp/mytmp/merce_flow_execution_output.sql .
+root@baymax-deploy-03:/var/lib/mysql# mysql -uroot -pmerce
+mysql> use merce;
+mysql> source ACT.sql;
+mysql> source merce_flow_execution_output.sql;
+mysql> exit
+Bye
+root@baymax-deploy-03:/var/lib/mysql# exit
+exit
+方法2：本地连接MySQL客户端，执行SQL脚本
+
+连接信息： 主机: hostIP, port: 3306, 用户名: root, 密码: merce
+
+
+
+执行SQL文件： ACT.sql， merce_flow_execution_output.sql
+
+
+
+
+
+11. 打开 http://192.168.2.81:8123，查看各服务是否注册成功
+
+
+12. 访问 http://192.168.2.81:8515, 输入许可证号进行激活，成功后即可正常访问登录页面
+
+
+
+
+13. 常见问题：
+ 1.各服务启动没有问题，但是consul对服务做健康检查一直失败
+
+    定位原因：防火墙是否关闭。若没有关闭，请参照文中关闭防火墙的命令关闭防火墙即可
+
+ 2. elasticsearch启动失败
+
+ 查找原因：    执行命令   docker logs es 查看es的容器日志。 
+
+
+
+ 失败原因：max virtual memory areas vm.max_map_count [65530] is too low, increase to at least [262144]（elasticsearch用户拥有的内存权限太小，至少需要262144；）
+
+ 解决方法：
+
+ 在   /etc/sysctl.conf文件最后添加
+
+ vm.max_map_count=262144
+
+说明：该字段的值大于262144即可
+
+ 修改后，执行命令 /sbin/sysctl -p  让参数立即生效
+
+再执行命令 docker start es，重新启动es即可
+
+
+
+3. wovenAPP启动失败，无法连接8050端口
+
+问题原因：Hadoop的NameNode处在安全模式下,导致resourcemanager容器启动失败
+
+解放方法：进入spark容器，关闭Hadoop安全模式. 然后启动resourcemanager容器。 执行如下命令
+
+[root@autotest merce]# docker exec -it spark /bin/bash
+root@baymax-deploy-03:/opt/spark-2.4.4# hadoop dfsadmin -safemode leave
+DEPRECATED: Use of this script to execute hdfs command is deprecated.
+Instead use the hdfs command for it.
+ 
+Safe mode is OFF
+root@baymax-deploy-03:/opt/spark-2.4.4# exit
+[root@autotest merce]# docker start resourcemanager
+woven app日志如下：
+
+
+
+
+
+           
